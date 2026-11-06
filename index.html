@@ -15,34 +15,28 @@
     header { background: #2c3e50; color: white; padding: 20px; text-align: center;}
     .content { flex: 1; padding: 20px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
     
-    /* 카드 디자인 */
     .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: background 0.3s;}
-    .card.canceled { background-color: #e9ecef; color: #888; border-color: #ddd; } /* 취소 건 회색 바탕 */
+    .card.canceled { background-color: #e9ecef; color: #888; border-color: #ddd; }
     
     .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; display: inline-block; margin-bottom: 5px;}
     .bg-front { background: #e74c3c; } .bg-back { background: #3498db; } .bg-hill { background: #27ae60; } .bg-gray { background: #95a5a6; }
     
-    /* 폼 요소 */
-    input[type="text"], input[type="date"], select, textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-family: inherit;}
+    input[type="text"], input[type="date"], input[type="number"], select, textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-family: inherit;}
     .btn { padding: 12px; background: #FFBB00; color: #333; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; }
     .btn:hover { opacity: 0.9; }
 
-    /* 통계 그리드 */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px; }
     .stat-box { background: white; padding: 20px; border-radius: 8px; border: 1px solid #eee; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02);}
     .stat-num { font-size: 24px; font-weight: bold; color: #2c3e50; margin-top: 10px; }
 
-    /* 클릭 가능 리스트 (운영관리) */
     .clickable { cursor: pointer; }
     .details-panel { margin-top: 10px; padding: 10px; background: #f8f9fa; border-left: 3px solid #2c3e50; border-radius: 0 4px 4px 0; font-size: 13px; color: #444; }
 
-    /* 반응형 네비게이션바 (PC vs Mobile) */
     nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
     nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 14px; transition: 0.2s;}
     nav button.active { font-weight: bold; color: #2c3e50; }
     
     @media (min-width: 768px) {
-      /* PC (컴퓨터 화면) */
       nav { position: sticky; top: 0; border-bottom: 1px solid #ddd; justify-content: center; gap: 10px; }
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; }
       nav button.active { border-bottom: 3px solid #2c3e50; background: #f8f9fa;}
@@ -50,7 +44,6 @@
       .upload-box { flex: 1; text-align: left; }
     }
     @media (max-width: 767px) {
-      /* Mobile (아이폰 화면) */
       nav { position: fixed; bottom: 0; width: 100%; border-top: 1px solid #ddd; }
       nav button { padding: 12px 0; font-size: 12px; }
       nav button.active { border-top: 3px solid #2c3e50; }
@@ -60,7 +53,14 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- 화면이 안 뜰 경우를 대비한 안내 메시지 -->
+    <div style="text-align:center; padding:80px 20px; color:#666;">
+      <h3>화면을 불러오고 있습니다...</h3>
+      <p>계속해서 이 화면만 보인다면 키보드의 <strong>Ctrl + Shift + R</strong> 을 눌러 강력 새로고침을 해주세요.</p>
+    </div>
+  </div>
+  
   <script type="text/babel">
     function App() {
       const [activeTab, setActiveTab] = React.useState('예약자료');
@@ -71,98 +71,110 @@
       const [mergedData, setMergedData] = React.useState([]);
       const [manualData, setManualData] = React.useState([]);
       const [isSyncing, setIsSyncing] = React.useState(false);
-      
-      // 아코디언(자세히 보기) 상태 관리
       const [expandedId, setExpandedId] = React.useState(null);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
 
-      // 유틸리티 함수들
-      const extractGuests = (str) => {
-        const m = String(str).match(/\d+/);
-        return m ? parseInt(m[0]) : 2; 
+      // 오류 방지용 안전한 날짜 파싱 로직
+      const formatDate = (d) => {
+        if (!d || isNaN(d.valueOf())) return '날짜미상';
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       };
 
       const parseExcelDate = (str) => {
         try {
-          const parts = str.split('~');
-          const startStr = parts[0].replace(/\(.*\)/, '').trim();
-          const endStr = parts[1].replace(/\(.*\)/, '').trim();
+          if (!str) return { start: null, end: null, nights: 1 };
+          const parts = String(str).split('~');
+          const startStr = parts[0].replace(/\(.*\)/g, '').trim();
+          const endStr = (parts[1] || '').replace(/\(.*\)/g, '').trim();
           const p = s => {
+            if (!s) return null;
             const [y, m, d] = s.split('.').map(x => parseInt(x));
+            if (!y || !m || !d) return null;
             return new Date(2000+y, m-1, d);
           };
           const start = p(startStr);
           const end = p(endStr);
-          const nights = Math.round((end - start) / (1000 * 60 * 60 * 24));
-          return { start, end, nights };
+          const nights = (start && end && !isNaN(start.valueOf()) && !isNaN(end.valueOf())) ? Math.round((end - start) / (1000 * 60 * 60 * 24)) : 1;
+          return { start, end, nights: nights > 0 ? nights : 1 };
         } catch(e) { return { start: null, end: null, nights: 1 }; }
       };
 
-      const formatDate = (d) => d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
+      const extractGuests = (str) => {
+        const m = String(str || '').match(/\d+/);
+        return m ? parseInt(m[0]) : 2; 
+      };
 
-      // 파일 연동 실행
       const handleSync = () => {
         if (!excelFile || !icsFile) return alert("엑셀과 캘린더(.ics) 파일을 모두 선택해주세요.");
         setIsSyncing(true);
 
         const readerX = new FileReader();
         readerX.onload = (e) => {
-          const wb = XLSX.read(e.target.result, { type: 'binary' });
-          const jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: 2 });
+          try {
+            const wb = XLSX.read(e.target.result, { type: 'binary' });
+            const jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: 2 });
 
-          const parsedEx = jsonData.map((row, idx) => {
-            const isCanceled = String(row['상태'] || '').includes('취소');
-            const dates = parseExcelDate(row['이용기간'] || '');
-            const rawRoom = String(row['객실'] || '');
-            return {
-              id: 'ex_' + idx, source: '엑셀',
-              room: rawRoom.includes('앞집') ? '앞집' : (rawRoom.includes('뒷집') ? '뒷집' : '언덕집'),
-              name: row['예약자'] || '미상',
-              start: dates.start, end: dates.end, nights: dates.nights,
-              status: isCanceled ? '취소' : '확정',
-              contact: row['전화번호'] || '',
-              guests: extractGuests(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.']),
-              memo: row['직원메모'] || row['요청사항'] || ''
-            };
-          });
-
-          const readerI = new FileReader();
-          readerI.onload = (e2) => {
-            const events = e2.target.result.split('BEGIN:VEVENT').slice(1);
-            const parsedIc = events.map((ev, idx) => {
-              const summaryMatch = ev.match(/SUMMARY:(.*)/);
-              const summary = summaryMatch ? summaryMatch[1] : '';
-              let r = '기타';
-              if(summary.includes('앞집')) r = '앞집';
-              if(summary.includes('뒷집')) r = '뒷집';
-              if(summary.includes('언덕집')) r = '언덕집';
-              
-              // ICS 날짜 파싱
-              const startMatch = ev.match(/DTSTART.*?(?::|=)(\d{8})/);
-              const endMatch = ev.match(/DTEND.*?(?::|=)(\d{8})/);
-              const sDate = startMatch ? new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8)) : null;
-              const eDate = endMatch ? new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8)) : null;
-              const nights = (sDate && eDate) ? Math.round((eDate - sDate)/(1000*60*60*24)) : 1;
-
-              const isCanceled = summary.includes('취소') || ev.includes('취소');
-              const descMatch = ev.match(/DESCRIPTION:([\s\S]*?)(?=\n[A-Z\-]+:|$)/);
-              const desc = descMatch ? descMatch[1].replace(/\\n/g, ' ') : '';
-              
+            const parsedEx = jsonData.map((row, idx) => {
+              const isCanceled = String(row['상태'] || '').includes('취소');
+              const dates = parseExcelDate(row['이용기간']);
+              const rawRoom = String(row['객실'] || '');
               return {
-                id: 'ic_' + idx, source: '캘린더', room: r,
-                name: summary.split('/')[0].replace(/\[\vert{}\]/g, '').trim(),
-                start: sDate, end: eDate, nights: nights,
+                id: 'ex_' + idx, source: '엑셀',
+                room: rawRoom.includes('앞집') ? '앞집' : (rawRoom.includes('뒷집') ? '뒷집' : '언덕집'),
+                name: row['예약자'] || '미상',
+                start: dates.start, end: dates.end, nights: dates.nights,
                 status: isCanceled ? '취소' : '확정',
-                contact: (summary.match(/010[-]?\d{4}[-]?\d{4}/) || desc.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0],
-                guests: extractGuests(summary),
-                memo: desc
+                contact: row['전화번호'] || '',
+                guests: extractGuests(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.']),
+                memo: row['직원메모'] || row['요청사항'] || ''
               };
             });
-            setMergedData([...parsedEx, ...parsedIc]);
+
+            const readerI = new FileReader();
+            readerI.onload = (e2) => {
+              try {
+                const events = e2.target.result.split('BEGIN:VEVENT').slice(1);
+                const parsedIc = events.map((ev, idx) => {
+                  const sumMatch = ev.match(/SUMMARY:(.*)/);
+                  const summary = sumMatch ? sumMatch[1] : '';
+                  let r = '기타';
+                  if(summary.includes('앞집')) r = '앞집';
+                  if(summary.includes('뒷집')) r = '뒷집';
+                  if(summary.includes('언덕집')) r = '언덕집';
+                  
+                  const startMatch = ev.match(/DTSTART.*?(?::|=)(\d{8})/);
+                  const endMatch = ev.match(/DTEND.*?(?::|=)(\d{8})/);
+                  const sDate = startMatch ? new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8)) : null;
+                  const eDate = endMatch ? new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8)) : null;
+                  const nights = (sDate && eDate && !isNaN(sDate.valueOf()) && !isNaN(eDate.valueOf())) ? Math.round((eDate - sDate)/(1000*60*60*24)) : 1;
+
+                  const isCanceled = summary.includes('취소') || ev.includes('취소');
+                  const descMatch = ev.match(/DESCRIPTION:([\s\S]*?)(?=\n[A-Z\-]+:|$)/);
+                  const desc = descMatch ? descMatch[1].replace(/\\n/g, ' ') : '';
+                  
+                  return {
+                    id: 'ic_' + idx, source: '캘린더', room: r,
+                    name: summary.split('/')[0].replace(/\[|\]/g, '').trim(),
+                    start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
+                    status: isCanceled ? '취소' : '확정',
+                    contact: (summary.match(/010[-]?\d{4}[-]?\d{4}/) || desc.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0],
+                    guests: extractGuests(summary),
+                    memo: desc
+                  };
+                });
+                setMergedData([...parsedEx, ...parsedIc]);
+                setIsSyncing(false);
+              } catch(err) {
+                alert("캘린더 파일 분석 중 오류가 발생했습니다.");
+                setIsSyncing(false);
+              }
+            };
+            readerI.readAsText(icsFile);
+          } catch(err) {
+            alert("엑셀 파일 분석 중 오류가 발생했습니다.");
             setIsSyncing(false);
-          };
-          readerI.readAsText(icsFile);
+          }
         };
         readerX.readAsBinaryString(excelFile);
       };
@@ -174,32 +186,37 @@
         const nights = Math.round((eDate - sDate)/(1000*60*60*24));
         const newData = {
           id: 'man_' + Date.now(), source: '직접입력', room: form.room, name: form.name, 
-          start: sDate, end: eDate, nights: nights,
-          status: '확정', contact: form.contact, guests: parseInt(form.guests), memo: form.memo
+          start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
+          status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo
         };
         setManualData([...manualData, newData]);
         alert("성공적으로 등록되었습니다!");
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
       };
 
-      const displayData = [...mergedData, ...manualData].sort((a,b) => (a.start || 0) - (b.start || 0));
+      // 안전한 정렬
+      const displayData = [...mergedData, ...manualData].sort((a,b) => {
+        const tA = (a.start && !isNaN(a.start.valueOf())) ? a.start.getTime() : 0;
+        const tB = (b.start && !isNaN(b.start.valueOf())) ? b.start.getTime() : 0;
+        return tA - tB;
+      });
       
       const getBadgeClass = (r, s) => {
         if(s === '취소') return 'bg-gray';
         return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
       };
 
-      // ---------------- 통계 계산 로직 ----------------
-      const validData = displayData.filter(d => d.status !== '취소' && d.start);
+      // 안전한 통계 계산
+      const validData = displayData.filter(d => d.status !== '취소' && d.start && !isNaN(d.start.valueOf()));
       const totalRes = validData.length;
       const totalNights = validData.reduce((acc, cur) => acc + (cur.nights || 0), 0);
-      const avgNights = totalRes ? (totalNights / totalRes).toFixed(1) : 0;
+      const avgNights = totalRes > 0 ? (totalNights / totalRes).toFixed(1) : 0;
       const totalGuests = validData.reduce((acc, cur) => acc + (cur.guests || 2), 0);
-      const avgGuests = totalRes ? (totalGuests / totalRes).toFixed(1) : 0;
+      const avgGuests = totalRes > 0 ? (totalGuests / totalRes).toFixed(1) : 0;
       
       const roomStats = { '앞집':0, '뒷집':0, '언덕집':0 };
-      let weekdayCount = 0; // Mon-Thu
-      let weekendCount = 0; // Fri-Sun
+      let weekdayCount = 0; 
+      let weekendCount = 0; 
       const nightsStats = {};
 
       validData.forEach(d => {
@@ -209,12 +226,12 @@
         nightsStats[d.nights] = (nightsStats[d.nights] || 0) + 1;
       });
 
-      // ---------------- 충돌 감지 로직 ----------------
+      // 안전한 충돌 감지
       const getConflicts = () => {
         const issues = [];
         const groups = {};
         displayData.forEach(d => {
-          if(!d.start) return;
+          if(!d.start || isNaN(d.start.valueOf())) return;
           const key = `${d.room}_${formatDate(d.start)}`;
           if(!groups[key]) groups[key] = [];
           groups[key].push(d);
@@ -247,11 +264,11 @@
             <h2 style={{margin: '0 0 15px 0'}}>🌙 스테이 달이실 대시보드</h2>
             <div className="upload-section">
               <div className="upload-box">
-                <label style={{fontSize:'12px', color:'#ccc'}}>1. 엑셀 파일 업로드 (.xlsx)</label>
+                <label style={{fontSize:'12px', color:'#ccc'}}>1. 엑셀 파일 (.xlsx)</label>
                 <input type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} style={{color:'white', border:'1px solid #555'}} />
               </div>
               <div className="upload-box">
-                <label style={{fontSize:'12px', color:'#ccc'}}>2. 캘린더 파일 업로드 (.ics)</label>
+                <label style={{fontSize:'12px', color:'#ccc'}}>2. 캘린더 파일 (.ics)</label>
                 <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} style={{color:'white', border:'1px solid #555'}} />
               </div>
               <button className="btn" onClick={handleSync} style={{maxWidth: '200px'}}>
@@ -261,8 +278,6 @@
           </header>
 
           <div className="content">
-            
-            {/* 1. 예약 자료 */}
             {activeTab === '예약자료' && (
               <div>
                 <h3 style={{marginTop:0}}>전체 통합 데이터 시트 ({displayData.length}건)</h3>
@@ -285,14 +300,149 @@
               </div>
             )}
 
-            {/* 2. 확인 필요 */}
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 직접 확인 필요 내역</h3>
-                <p style={{fontSize:'14px', color:'#666'}}>엑셀과 캘린더 정보가 충돌(더블 부킹, 취소 누락 등)하는 항목입니다.</p>
+                <p style={{fontSize:'14px', color:'#666'}}>엑셀과 캘린더 정보가 충돌하는 항목입니다.</p>
                 {conflicts.length > 0 ? conflicts.map((c, i) => (
                   <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c'}}>
                     <strong>[{c.type}]</strong> <span style={{color:'#666', fontSize:'13px'}}>{c.date}</span>
                     <ul style={{fontSize:'13px', paddingLeft:'20px', marginTop:'10px', color:'#444'}}>
                       {c.items.map(item => (
-                        <li key={item.id}>{item.room} / {item.name} ({item.source}:
+                        <li key={item.id}>{item.room} / {item.name} ({item.source}: {item.status})</li>
+                      ))}
+                    </ul>
+                  </div>
+                )) : (
+                  <div className="card" style={{textAlign:'center', color:'#27ae60', padding:'30px 0'}}>
+                    현재 두 파일 간 충돌이나 더블 부킹이 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === '운영관리' && (
+              <div>
+                <h3 style={{marginTop:0}}>📅 운영 관리 타임라인</h3>
+                <p style={{fontSize:'14px', color:'#666'}}>항목을 <strong>클릭</strong>하면 연락처와 메모가 보입니다.</p>
+                {validData.map(d => (
+                  <div key={d.id} className="card clickable" onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}>
+                    <div style={{display:'flex', alignItems:'center'}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize: '13px', color: '#555', marginBottom: '5px'}}>{formatDate(d.start)} (체크인)</div>
+                        <div>
+                          <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                          <span style={{fontWeight:'bold', marginLeft:'5px'}}>{d.name}</span>
+                          <span style={{fontSize:'13px', marginLeft:'5px'}}>{d.nights}박 / {d.guests}인</span>
+                        </div>
+                      </div>
+                      <div style={{fontSize:'20px', color:'#ccc'}}>{expandedId === d.id ? '▲' : '▼'}</div>
+                    </div>
+                    {expandedId === d.id && (
+                      <div className="details-panel">
+                        <div style={{marginBottom:'5px'}}><strong>연락처:</strong> {d.contact || '없음'}</div>
+                        <div><strong>메모/요청:</strong> {d.memo || '없음'}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === '이용통계' && (
+              <div>
+                <h3 style={{marginTop:0}}>📊 전체 이용 통계</h3>
+                
+                <div className="stats-grid">
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#666'}}>총 예약건 수</div>
+                    <div className="stat-num">{totalRes} 건</div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#666'}}>총 / 평균 숙박일 수</div>
+                    <div className="stat-num">{totalNights}박 / {avgNights}박</div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#666'}}>총 / 평균 이용자 수</div>
+                    <div className="stat-num">{totalGuests}명 / {avgGuests}명</div>
+                  </div>
+                </div>
+
+                <div className="stats-grid">
+                  <div className="card" style={{flex:1, marginBottom:0}}>
+                    <h4>객실별 예약 건수</h4>
+                    <ul style={{lineHeight:'1.8', color:'#444'}}>
+                      <li><strong>앞집:</strong> {roomStats['앞집']}건 ({totalRes ? Math.round(roomStats['앞집']/totalRes*100) : 0}%)</li>
+                      <li><strong>뒷집:</strong> {roomStats['뒷집']}건 ({totalRes ? Math.round(roomStats['뒷집']/totalRes*100) : 0}%)</li>
+                      <li><strong>언덕집:</strong> {roomStats['언덕집']}건 ({totalRes ? Math.round(roomStats['언덕집']/totalRes*100) : 0}%)</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="card" style={{flex:1, marginBottom:0}}>
+                    <h4>요일 및 숙박일 패턴</h4>
+                    <ul style={{lineHeight:'1.8', color:'#444'}}>
+                      <li><strong>평일(월~목) 시작:</strong> {weekdayCount}건</li>
+                      <li><strong>주말(금~일) 시작:</strong> {weekendCount}건</li>
+                      <li style={{marginTop:'10px', borderTop:'1px dashed #eee', paddingTop:'10px'}}>
+                        <strong>숙박일수 분포:</strong><br/>
+                        {Object.entries(nightsStats).sort((a,b)=>a[0]-b[0]).map(([n, c]) => (
+                          <span key={n} style={{marginRight:'10px'}}>{n}박: {c}건</span>
+                        ))}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === '직접입력' && (
+              <div>
+                <h3 style={{marginTop:0}}>✏️ 수기 예약 직접 입력</h3>
+                <p style={{fontSize:'14px', color:'#666'}}>언덕집 등 외부 플랫폼 예약을 기입하면 즉시 연동됩니다.</p>
+                <div className="card" style={{maxWidth:'600px', margin:'0 auto'}}>
+                  <label>예약 장소</label>
+                  <select value={form.room} onChange={e => setForm({...form, room: e.target.value})}>
+                    <option value="언덕집">언덕집</option><option value="앞집">앞집</option><option value="뒷집">뒷집</option>
+                  </select>
+                  
+                  <label>예약자 이름</label>
+                  <input type="text" placeholder="예: 홍길동" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                  
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <div style={{flex:1}}>
+                      <label>체크인</label>
+                      <input type="date" value={form.start} onChange={e => setForm({...form, start: e.target.value})} />
+                    </div>
+                    <div style={{flex:1}}>
+                      <label>체크아웃</label>
+                      <input type="date" value={form.end} onChange={e => setForm({...form, end: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <div style={{flex:1}}>
+                      <label>인원 수</label>
+                      <input type="number" min="1" value={form.guests} onChange={e => setForm({...form, guests: e.target.value})} />
+                    </div>
+                    <div style={{flex:2}}>
+                      <label>연락처</label>
+                      <input type="text" placeholder="예: 010-1234-5678" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <label>메모 사항</label>
+                  <textarea rows="3" placeholder="예약 플랫폼, 추가 요청사항 등" value={form.memo} onChange={e => setForm({...form, memo: e.target.value})}></textarea>
+                  
+                  <button className="btn" onClick={handleManualSubmit}>데이터 저장 및 연동하기</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
