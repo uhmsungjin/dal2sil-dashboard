@@ -23,8 +23,6 @@
     .content { flex: 1; padding: 15px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
     
     .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
-    
-    /* 💡 수정됨: 취소 카드 색상을 훨씬 어둡고 확연하게 차이나는 회색으로 변경 */
     .card.canceled { background-color: #d6d8db; color: #495057; border-color: #c6c8ca; }
     .card.canceled strong { color: #343a40; text-decoration: line-through; }
     
@@ -101,8 +99,6 @@
       const [allData, setAllData] = React.useState([]);
       const [currentMonth, setCurrentMonth] = React.useState(new Date());
       const [selectedEvent, setSelectedEvent] = React.useState(null);
-      
-      // 💡 수정됨: 직접입력 폼에 결제(매출) 금액 상태(price) 추가
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
 
       React.useEffect(() => {
@@ -188,8 +184,6 @@
               const dates = parseExcelDate(row['이용기간']);
               if(!dates) return;
               const rawRoom = String(row['객실'] || '');
-              
-              // 💡 수정됨: 결제금액과 환불금액을 추출하여 순매출(Revenue) 계산
               const price = parseInt(String(row['결제금액'] || '0').replace(/,/g, '')) || 0;
               const refund = parseInt(String(row['환불금액'] || '0').replace(/,/g, '')) || 0;
               const revenue = price - refund;
@@ -202,7 +196,7 @@
                 contact: row['전화번호'] || '',
                 guests: String(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.'] || '').match(/\d+/) ? parseInt(String(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.'] || '').match(/\d+/)[0]) : 2,
                 memo: (row['직원메모'] || row['요청사항'] || '').trim(),
-                price: price, refund: refund, revenue: revenue, // 통계용 매출액
+                price: price, refund: refund, revenue: revenue,
                 source: '엑셀'
               });
             });
@@ -242,7 +236,7 @@
                     contact: contact,
                     guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2,
                     memo: desc,
-                    price: 0, refund: 0, revenue: 0, // 캘린더는 매출 없음
+                    price: 0, refund: 0, revenue: 0,
                     source: '캘린더'
                   });
                 });
@@ -292,7 +286,6 @@
         if(!form.name || !form.start || !form.end) return alert("필수 정보를 입력해주세요.");
         const sDate = new Date(form.start);
         const eDate = new Date(form.end);
-        // 직접 입력한 결제금액도 순매출로 반영
         const p = parseInt(String(form.price).replace(/,/g, '')) || 0;
 
         const newData = {
@@ -313,9 +306,31 @@
         return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
       };
 
-      // 💡 [핵심 통계 계산 로직] 입주율 및 매출액 산출
+      // --------------------------------------------------------
+      // 💡 [이용통계 계산 로직] 기존 통계 + 매출/입주율 모두 포함
+      // --------------------------------------------------------
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
+      const activeData = validData.filter(d => d.status !== '취소');
       
+      // 1. 기존 항목 (총건수, 박수, 인원수, 요일 패턴 등)
+      const totalRes = activeData.length;
+      const totalNights = activeData.reduce((acc, cur) => acc + (cur.nights || 0), 0);
+      const avgNights = totalRes > 0 ? (totalNights / totalRes).toFixed(1) : 0;
+      const totalGuests = activeData.reduce((acc, cur) => acc + (cur.guests || 2), 0);
+      const avgGuests = totalRes > 0 ? (totalGuests / totalRes).toFixed(1) : 0;
+      
+      const roomStats = { '앞집':0, '뒷집':0, '언덕집':0 };
+      let weekdayCount = 0; let weekendCount = 0;
+      const nightsStats = {};
+
+      activeData.forEach(d => {
+        if(roomStats[d.room] !== undefined) roomStats[d.room]++;
+        const day = d.start.getDay();
+        if(day >= 1 && day <= 4) weekdayCount++; else weekendCount++;
+        nightsStats[d.nights] = (nightsStats[d.nights] || 0) + 1;
+      });
+
+      // 2. 신규 항목 (매출 및 입주율 객체)
       const statsObj = {
         overall: { revenue: 0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} },
         monthly: {}
@@ -336,14 +351,12 @@
           statsObj.monthly[monthKey] = { revenue:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
         }
 
-        // 매출 (체크인 달력 기준)
         const rev = d.revenue || 0;
         statsObj.overall.revenue += rev;
         statsObj.overall.rooms[d.room].rev += rev;
         statsObj.monthly[monthKey].revenue += rev;
         statsObj.monthly[monthKey].rooms[d.room].rev += rev;
 
-        // 입주율 (숙박일을 해당 월에 정확히 분배)
         if (d.status !== '취소') {
           let curr = new Date(d.start);
           while(curr < d.end) {
@@ -358,10 +371,31 @@
         }
       });
 
-      // 전체 운영 일수 계산 (입주율 퍼센트 산출용)
       const overallTotalDays = minDate < maxDate ? Math.max(1, Math.round((maxDate - minDate)/(1000*60*60*24))) : 1;
 
-      // 캘린더 생성
+      const getConflicts = () => {
+        const issues = [];
+        const groups = {};
+        allData.forEach(d => {
+          if(!d.start || isNaN(d.start.valueOf())) return;
+          const key = `${d.room}_${formatDate(d.start)}`;
+          if(!groups[key]) groups[key] = [];
+          groups[key].push(d);
+        });
+        Object.keys(groups).forEach(key => {
+          const group = groups[key];
+          if(group.length > 1) {
+            const active = group.filter(g => g.status !== '취소');
+            if(active.length > 1) issues.push({ type: '중복 예약 의심', date: formatDate(active[0].start), items: active });
+            else if(group.some(x => x.source === '엑셀' && x.status === '취소') && group.some(x => x.source === '캘린더' && x.status !== '취소')) {
+              issues.push({ type: '취소/유지 상태 불일치', date: formatDate(group[0].start), items: group });
+            }
+          }
+        });
+        return issues;
+      };
+      const conflicts = getConflicts();
+
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -446,11 +480,60 @@
               </div>
             )}
 
+            {/* 💡 [이용통계 탭] 기존 통계(최상단) + 신규 재무/입주율 통계(하단) 통합 */}
             {activeTab === '이용통계' && (
               <div>
-                <h3 style={{marginTop:0, marginBottom:'20px'}}>📈 통합 재무 & 입주율 통계</h3>
+                <h3 style={{marginTop:0, marginBottom:'20px'}}>📊 종합 이용 통계 (확정 건 기준)</h3>
                 
-                {/* 1. 전체 누적 통계 */}
+                {/* --- 1. 복구된 기존 통계 영역 --- */}
+                <div className="stats-grid" style={{marginTop:0}}>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 예약건수</div>
+                    <div className="stat-num">{totalRes}<span style={{fontSize:'16px'}}>건</span></div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 / 평균 숙박일</div>
+                    <div className="stat-num">{totalNights}<span style={{fontSize:'16px'}}>박</span> <span style={{fontSize:'16px', color:'#aaa'}}>/ {avgNights}박</span></div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 / 평균 인원수</div>
+                    <div className="stat-num">{totalGuests}<span style={{fontSize:'16px'}}>명</span> <span style={{fontSize:'16px', color:'#aaa'}}>/ {avgGuests}명</span></div>
+                  </div>
+                </div>
+
+                <div className="stats-grid">
+                  <div className="card" style={{flex:1}}>
+                    <h4 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50'}}>객실별 점유 현황</h4>
+                    <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                      {['앞집', '뒷집', '언덕집'].map(r => (
+                        <div key={r} style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                          <span className={`badge ${getBadgeClass(r, '확정')}`}>{r}</span>
+                          <div style={{fontSize:'14px', fontWeight:'bold'}}>{roomStats[r]}건 <span style={{color:'#999', fontSize:'12px', fontWeight:'normal'}}>({totalRes ? Math.round(roomStats[r]/totalRes*100) : 0}%)</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="card" style={{flex:1}}>
+                    <h4 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50'}}>숙박 패턴 분석</h4>
+                    <ul style={{lineHeight:'2', color:'#444', margin:0, paddingLeft:'20px', fontSize:'14px'}}>
+                      <li><strong>평일(월~목) 입실:</strong> {weekdayCount}건</li>
+                      <li><strong>주말(금~일) 입실:</strong> {weekendCount}건</li>
+                      <li style={{marginTop:'10px', borderTop:'1px dashed #eee', paddingTop:'10px'}}>
+                        <strong>연박 현황:</strong><br/>
+                        {Object.entries(nightsStats).sort((a,b)=>a[0]-b[0]).map(([n, c]) => (
+                          <span key={n} style={{display:'inline-block', marginRight:'15px', background:'#f8f9fa', padding:'3px 8px', borderRadius:'4px', fontSize:'12px', marginTop:'5px'}}>
+                            {n}박: <strong style={{color:'#2c3e50'}}>{c}건</strong>
+                          </span>
+                        ))}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* --- 2. 재무 및 입주율 통계 영역 --- */}
+                <h3 style={{marginTop:'40px', marginBottom:'20px', borderTop:'2px solid #eee', paddingTop:'20px'}}>📈 통합 재무 & 객실 가동률</h3>
+                
                 <h4 style={{color:'#2c3e50', borderBottom:'2px solid #2c3e50', paddingBottom:'5px', marginBottom:'15px'}}>🏆 전체 기간 누적 현황</h4>
                 <div className="stats-grid" style={{marginTop:0}}>
                   <div className="stat-box" style={{border:'2px solid #FFBB00'}}>
@@ -472,7 +555,6 @@
                   </div>
                 </div>
 
-                {/* 2. 월별 분할 통계 */}
                 <h4 style={{color:'#2c3e50', borderBottom:'2px solid #2c3e50', paddingBottom:'5px', marginTop:'30px', marginBottom:'15px'}}>🗓️ 월별 상세 내역</h4>
                 {Object.keys(statsObj.monthly).sort().reverse().map(mKey => {
                   const mData = statsObj.monthly[mKey];
@@ -567,7 +649,6 @@
                     </div>
                   </div>
                   
-                  {/* 💡 수정됨: 결제(매출) 금액 입력 폼 추가 */}
                   <label style={{fontSize:'12px', fontWeight:'bold', color:'#d35400'}}>💰 총 결제(매출) 금액</label>
                   <input type="number" placeholder="예: 300000 (숫자만 입력)" value={form.price} onChange={e => setForm({...form, price: e.target.value})} style={{border:'2px solid #FFBB00'}} />
 
