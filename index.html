@@ -5,59 +5,73 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>스테이 달이실 스마트 대시보드</title>
   
-  <!-- React 및 엑셀 파싱 라이브러리 -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
-  <!-- Firebase 실시간 클라우드 DB 연동 필수 스크립트 -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <style>
-    body { margin: 0; background-color: #f4f6f8; font-family: -apple-system, sans-serif; color: #333; }
+    body { margin: 0; background-color: #f8f9fa; font-family: -apple-system, sans-serif; color: #333; }
     .app-container { display: flex; flex-direction: column; min-height: 100vh; }
-    header { background: #2c3e50; color: white; padding: 20px; text-align: center;}
+    
+    /* 로고가 들어간 헤더 디자인 */
+    header { background: #2c3e50; color: white; padding: 25px 20px 20px; text-align: center; border-bottom: 3px solid #FFBB00;}
+    .header-logo { max-height: 45px; margin-bottom: 10px; }
+    
     .content { flex: 1; padding: 15px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
     
-    .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .card.canceled { background-color: #e9ecef; color: #888; border-color: #ddd; }
+    .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+    .card.canceled { background-color: #f8f9fa; color: #adb5bd; border-color: #e9ecef; }
     
-    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; display: inline-block; margin-bottom: 5px;}
-    .bg-front { background: #e74c3c; } .bg-back { background: #3498db; } .bg-hill { background: #27ae60; } .bg-gray { background: #95a5a6; }
+    /* 파스텔톤 색상 뱃지 */
+    .badge { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-block; margin-bottom: 5px;}
+    .bg-front { background: #ffe3e3; color: #c0392b; border: 1px solid #ffbaba; } /* 앞집: 파스텔 빨강 */
+    .bg-back { background: #d4e6f1; color: #2980b9; border: 1px solid #a9cce3; } /* 뒷집: 파스텔 파랑 */
+    .bg-hill { background: #d5f5e3; color: #27ae60; border: 1px solid #abebc6; } /* 언덕집: 파스텔 초록 */
+    .bg-gray { background: #f2f4f4; color: #7f8c8d; border: 1px solid #d5dbdb; } /* 취소: 밝은 회색 */
     
-    input, select, textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-family: inherit;}
-    .btn { padding: 12px; background: #FFBB00; color: #333; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; }
+    input, select, textarea { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 14px;}
+    .btn { padding: 14px; background: #FFBB00; color: #2c3e50; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; transition: 0.2s;}
+    .btn:hover { background: #f39c12; }
     
-    .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #ddd; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;}
-    .cal-header { background: #f8f9fa; text-align: center; font-size: 11px; padding: 8px 0; font-weight: bold; color: #555; }
-    .cal-cell { background: #fff; min-height: 80px; padding: 3px; display: flex; flex-direction: column; gap: 2px; }
-    .cal-date { font-size: 11px; color: #666; margin-bottom: 4px; text-align: left; }
-    .cal-event { font-size: 10px; padding: 4px; border-radius: 3px; color: #fff; cursor: pointer; line-height: 1.2; word-break: break-all; }
+    /* 달력 CSS */
+    .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden;}
+    .cal-header { background: #f8f9fa; text-align: center; font-size: 12px; padding: 10px 0; font-weight: bold; color: #555; }
+    .cal-cell { background: #fff; min-height: 85px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+    .cal-date { font-size: 11px; color: #888; margin-bottom: 4px; font-weight: bold; }
+    .cal-event { font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; line-height: 1.2; word-break: break-all; font-weight: 600;}
     
-    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-    .modal-content { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    /* 통계 CSS */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 15px; }
+    .stat-box { background: white; padding: 20px; border-radius: 12px; border: 1px solid #eee; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
+    .stat-num { font-size: 26px; font-weight: 800; color: #2c3e50; margin-top: 8px; }
 
-    nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
-    nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 13px; font-weight: 500;}
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;}
+    .modal-content { background: white; padding: 25px; border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+
+    /* 네비게이션바 - 모바일 스크롤 지원 */
+    nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); overflow-x: auto; white-space: nowrap;}
+    nav::-webkit-scrollbar { display: none; }
+    nav button { flex: 1; min-width: 75px; padding: 16px 5px; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 13px; font-weight: 600;}
     nav button.active { font-weight: bold; color: #2c3e50; }
     
     @media (min-width: 768px) {
       nav { position: sticky; top: 0; border-bottom: 1px solid #ddd; justify-content: center; gap: 10px; }
-      nav button { max-width: 150px; border-radius: 8px 8px 0 0; }
-      nav button.active { border-bottom: 3px solid #2c3e50; background: #f8f9fa;}
-      .upload-section { display: flex; gap: 15px; align-items: flex-end; justify-content: center; max-width: 800px; margin: 0 auto; }
-      .upload-box { flex: 1; text-align: left; }
+      nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 18px 0;}
+      nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
+      .upload-section { background: white; padding: 30px; border-radius: 12px; border: 1px solid #eee;}
       .cal-cell { min-height: 120px; }
       .cal-event { font-size: 12px; padding: 6px; }
     }
     @media (max-width: 767px) {
       nav { position: fixed; bottom: 0; width: 100%; border-top: 1px solid #ddd; }
-      nav button.active { border-top: 3px solid #2c3e50; }
-      .upload-section { display: flex; flex-direction: column; gap: 10px; }
-      .upload-box { width: 100%; text-align: left;}
+      nav button.active { border-top: 3px solid #FFBB00; }
+      .upload-section { background: white; padding: 20px; border-radius: 12px; border: 1px solid #eee; margin-top: 10px;}
     }
   </style>
 </head>
@@ -65,44 +79,39 @@
   <div id="root"></div>
   
   <script type="text/babel">
-    // ★★★ 아래 정보를 본인의 파이어베이스 설정값으로 교체하세요! ★★★
+    // 사용자님의 Firebase 설정 완벽 적용
     const firebaseConfig = {
       apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iFZk0OPNhA",
-  authDomain: "dal2sil-db.firebaseapp.com",
-  projectId: "dal2sil-db",
-  storageBucket: "dal2sil-db.firebasestorage.app",
-  messagingSenderId: "1064972750915",
-  appId: "1:1064972750915:web:08072533df7408d28844f6"
+      authDomain: "dal2sil-db.firebaseapp.com",
+      projectId: "dal2sil-db",
+      storageBucket: "dal2sil-db.firebasestorage.app",
+      messagingSenderId: "1064972750915",
+      appId: "1:1064972750915:web:08072533df7408d28844f6"
     };
 
-    // Firebase 초기화
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
     }
     const db = firebase.database();
 
     function App() {
+      const tabs = ['운영관리', '이용통계', '예약자료', '확인필요', '직접입력', '파일연동'];
       const [activeTab, setActiveTab] = React.useState('운영관리');
-      const tabs = ['예약자료', '확인필요', '운영관리', '이용통계', '직접입력'];
       
       const [excelFile, setExcelFile] = React.useState(null);
       const [icsFile, setIcsFile] = React.useState(null);
       const [isSyncing, setIsSyncing] = React.useState(false);
       
-      // 클라우드 데이터를 담을 상태
       const [allData, setAllData] = React.useState([]);
-      
       const [currentMonth, setCurrentMonth] = React.useState(new Date());
       const [selectedEvent, setSelectedEvent] = React.useState(null);
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
 
-      // 앱 실행 시 클라우드 DB에서 실시간 데이터 불러오기
       React.useEffect(() => {
         const ref = db.ref('dal2sil_reservations');
         ref.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
-            // DB에서 가져온 문자열 형태의 날짜를 다시 Date 객체로 변환
             const parsedData = Object.values(data).map(d => ({
               ...d,
               start: d.start ? new Date(d.start) : null,
@@ -114,9 +123,7 @@
         return () => ref.off();
       }, []);
 
-      // 클라우드 DB에 데이터 저장 함수
       const saveToCloud = (dataArray) => {
-        // Firebase에는 Date 객체를 통째로 넣을 수 없으므로 ISO 텍스트로 변환하여 저장
         const cleanData = dataArray.map(d => ({
           ...d,
           start: d.start ? d.start.toISOString() : null,
@@ -147,11 +154,7 @@
         } catch(e) { return null; }
       };
 
-      // ★ 엑셀 + 캘린더 통합 로직 (연락처 ICS 우선 적용 반영)
       const handleSync = () => {
-        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-          return alert("Firebase 설정값이 입력되지 않았습니다. 코드 상단 설정값을 교체해주세요.");
-        }
         if (!excelFile || !icsFile) return alert("엑셀과 캘린더(.ics) 파일을 모두 업로드해주세요.");
         setIsSyncing(true);
 
@@ -213,25 +216,16 @@
                 });
 
                 const dataMap = new Map();
-                
-                // 1. 기존 클라우드 데이터 세팅
-                allData.forEach(d => {
-                  if(d.start && d.room !== '기타') dataMap.set(`${d.room}_${formatDate(d.start)}`, d);
-                });
+                allData.forEach(d => { if(d.start && d.room !== '기타') dataMap.set(`${d.room}_${formatDate(d.start)}`, d); });
+                icList.forEach(ic => { if(ic.room !== '기타') dataMap.set(`${ic.room}_${formatDate(ic.start)}`, ic); });
 
-                // 2. 캘린더(ICS) 데이터 세팅 (이때 연락처가 들어감)
-                icList.forEach(ic => {
-                  if(ic.room !== '기타') dataMap.set(`${ic.room}_${formatDate(ic.start)}`, ic);
-                });
-
-                // 3. 엑셀 데이터로 덮어쓰며 병합 (ICS 연락처 우선 적용)
                 exList.forEach(ex => {
                   const key = `${ex.room}_${formatDate(ex.start)}`;
-                  const existing = dataMap.get(key); // existing은 방금 넣은 ICS 캘린더 데이터입니다.
+                  const existing = dataMap.get(key); 
                   if (existing) {
                     dataMap.set(key, {
-                      ...ex, // 상태, 객실, 결제여부 등 기본 뼈대는 엑셀 사용
-                      contact: existing.contact ? existing.contact : ex.contact, // ★ 캘린더에 연락처가 있으면 무조건 우선 적용!
+                      ...ex, 
+                      contact: existing.contact ? existing.contact : ex.contact,
                       memo: (existing.memo ? existing.memo + " | " : "") + ex.memo,
                       source: '통합(완료)'
                     });
@@ -241,19 +235,15 @@
                 });
 
                 const finalArray = Array.from(dataMap.values()).map(d => ({...d, id: d.id || `id_${Date.now()}_${Math.random()}`}));
-                
-                // 클라우드에 최종 저장
                 saveToCloud(finalArray);
-                alert("데이터가 클라우드에 업데이트되었습니다. 이제 모든 기기에서 공유됩니다!");
+                alert("클라우드 연동 완료! 통계 및 운영 캘린더가 최신화되었습니다.");
                 setIsSyncing(false);
-              } catch(err) {
-                alert("캘린더 데이터 분석 중 오류 발생"); setIsSyncing(false);
-              }
+                setExcelFile(null); setIcsFile(null);
+                setActiveTab('운영관리'); // 연동 완료 후 달력으로 이동
+              } catch(err) { alert("캘린더 파일 분석 중 오류 발생"); setIsSyncing(false); }
             };
             readerI.readAsText(icsFile);
-          } catch(err) {
-            alert("엑셀 데이터 분석 중 오류 발생"); setIsSyncing(false);
-          }
+          } catch(err) { alert("엑셀 파일 분석 중 오류 발생"); setIsSyncing(false); }
         };
         readerX.readAsBinaryString(excelFile);
       };
@@ -267,38 +257,74 @@
           start: sDate, end: eDate, nights: Math.max(1, Math.round((eDate - sDate)/(1000*60*60*24))),
           status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo
         };
-        
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
-        
         saveToCloud([...filtered, newData]);
-        alert("수기 예약이 클라우드에 즉시 연동되었습니다!");
+        alert("수기 예약이 저장되었습니다!");
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
       };
 
-      const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
+      // 파스텔 뱃지 클래스
+      const getBadgeClass = (r, s) => {
+        if(s === '취소') return 'bg-gray';
+        return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
+      };
 
+      // ---------------- 기능: 확인필요 & 통계 & 데이터 ----------------
+      const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
+      const activeData = validData.filter(d => d.status !== '취소');
+      
+      const totalRes = activeData.length;
+      const totalNights = activeData.reduce((acc, cur) => acc + (cur.nights || 0), 0);
+      const avgNights = totalRes > 0 ? (totalNights / totalRes).toFixed(1) : 0;
+      const totalGuests = activeData.reduce((acc, cur) => acc + (cur.guests || 2), 0);
+      const avgGuests = totalRes > 0 ? (totalGuests / totalRes).toFixed(1) : 0;
+      
+      const roomStats = { '앞집':0, '뒷집':0, '언덕집':0 };
+      let weekdayCount = 0; let weekendCount = 0;
+      const nightsStats = {};
+
+      activeData.forEach(d => {
+        if(roomStats[d.room] !== undefined) roomStats[d.room]++;
+        const day = d.start.getDay();
+        if(day >= 1 && day <= 4) weekdayCount++; else weekendCount++;
+        nightsStats[d.nights] = (nightsStats[d.nights] || 0) + 1;
+      });
+
+      const getConflicts = () => {
+        const issues = [];
+        const groups = {};
+        allData.forEach(d => {
+          if(!d.start || isNaN(d.start.valueOf())) return;
+          const key = `${d.room}_${formatDate(d.start)}`;
+          if(!groups[key]) groups[key] = [];
+          groups[key].push(d);
+        });
+        Object.keys(groups).forEach(key => {
+          const group = groups[key];
+          if(group.length > 1) {
+            const active = group.filter(g => g.status !== '취소');
+            if(active.length > 1) issues.push({ type: '중복 예약 의심', date: formatDate(active[0].start), items: active });
+            else if(group.some(x => x.source === '엑셀' && x.status === '취소') && group.some(x => x.source === '캘린더' && x.status !== '취소')) {
+              issues.push({ type: '취소/유지 상태 불일치', date: formatDate(group[0].start), items: group });
+            }
+          }
+        });
+        return issues;
+      };
+      const conflicts = getConflicts();
+
+      // 달력 계산
       const getDaysInMonth = (date) => {
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        
+        const year = date.getFullYear(); const month = date.getMonth();
+        const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
         const days = [];
         for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
         for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
         return days;
       };
       const daysInMonth = getDaysInMonth(currentMonth);
-
-      const changeMonth = (offset) => {
-        setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1));
-      };
-
-      const getBadgeClass = (r, s) => {
-        if(s === '취소') return 'bg-gray';
-        return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
-      };
+      const changeMonth = (offset) => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1));
 
       return (
         <div className="app-container">
@@ -309,64 +335,64 @@
           </nav>
 
           <header>
-            <h2 style={{margin: '0 0 15px 0'}}>🌙 스테이 달이실 대시보드 (클라우드 연동)</h2>
-            <div className="upload-section">
-              <div className="upload-box">
-                <label style={{fontSize:'12px', color:'#ccc'}}>1. 엑셀 파일 (.xlsx)</label>
-                <input type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} style={{color:'white', border:'1px solid #555'}} />
-              </div>
-              <div className="upload-box">
-                <label style={{fontSize:'12px', color:'#ccc'}}>2. 캘린더 파일 (.ics)</label>
-                <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} style={{color:'white', border:'1px solid #555'}} />
-              </div>
-              <button className="btn" onClick={handleSync} style={{maxWidth: '200px'}}>
-                {isSyncing ? '처리 중...' : '클라우드에 연동하기'}
-              </button>
-            </div>
-            <p style={{fontSize:'12px', color:'#aaa', marginTop:'10px', marginBottom:0}}>
-              * 파일을 올려 연동하면 PC와 아이폰에 동시 업데이트되며 캘린더의 연락처가 최우선 적용됩니다.
-            </p>
+            <img src="로고_투명_가로_화이트.png" alt="스테이 달이실" className="header-logo" />
+            <div style={{fontSize: '13px', color: '#bdc3c7'}}>통합 관리 대시보드</div>
           </header>
 
           <div className="content">
+            
+            {/* 1. 파일연동 탭 (신규) */}
+            {activeTab === '파일연동' && (
+              <div>
+                <h3 style={{marginTop:0, display:'flex', alignItems:'center', gap:'8px'}}>
+                  ☁️ 클라우드 파일 연동
+                </h3>
+                <div className="upload-section">
+                  <p style={{fontSize:'14px', color:'#666', marginTop:0, marginBottom:'20px'}}>
+                    엑셀과 캘린더 파일을 올려 최신 예약 정보를 모든 기기에 동기화하세요.
+                  </p>
+                  <div>
+                    <label style={{fontSize:'13px', fontWeight:'bold', color:'#333'}}>1. 엑셀 파일 (.xlsx)</label>
+                    <input type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} />
+                  </div>
+                  <div style={{marginTop:'10px'}}>
+                    <label style={{fontSize:'13px', fontWeight:'bold', color:'#333'}}>2. 캘린더 파일 (.ics)</label>
+                    <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} />
+                  </div>
+                  <button className="btn" onClick={handleSync} style={{marginTop:'15px'}}>
+                    {isSyncing ? '클라우드 연동 중...' : '데이터 연동하기'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 2. 운영관리 탭 */}
             {activeTab === '운영관리' && (
               <div>
-                <h3 style={{marginTop:0}}>📅 운영 관리 (월별 캘린더)</h3>
-                
+                <h3 style={{marginTop:0}}>📅 월별 예약 캘린더</h3>
                 <div className="cal-controls">
-                  <button className="btn" style={{width:'auto', padding:'8px 15px'}} onClick={() => changeMonth(-1)}>◀ 이전 달</button>
-                  <strong style={{fontSize:'18px'}}>{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</strong>
-                  <button className="btn" style={{width:'auto', padding:'8px 15px'}} onClick={() => changeMonth(1)}>다음 달 ▶</button>
+                  <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(-1)}>◀ 이전달</button>
+                  <strong style={{fontSize:'17px', color:'#2c3e50'}}>{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</strong>
+                  <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(1)}>다음달 ▶</button>
                 </div>
-
                 <div className="cal-grid">
                   {['일', '월', '화', '수', '목', '금', '토'].map(day => (
-                    <div key={day} className="cal-header" style={{color: day==='일' ? 'red' : (day==='토' ? 'blue' : '#555')}}>{day}</div>
+                    <div key={day} className="cal-header" style={{color: day==='일' ? '#e74c3c' : (day==='토' ? '#3498db' : '#555')}}>{day}</div>
                   ))}
-                  
                   {daysInMonth.map((date, i) => {
                     if (!date) return <div key={`empty-${i}`} className="cal-cell" style={{background:'#f9f9f9'}}></div>;
-                    
-                    const dayEvents = validData.filter(d => {
-                      if (d.status === '취소') return false;
+                    const dayEvents = activeData.filter(d => {
                       const dTime = date.getTime();
-                      const sTime = d.start.getTime();
-                      const eTime = d.end.getTime();
-                      return dTime >= sTime && dTime < eTime; 
+                      return dTime >= d.start.getTime() && dTime < d.end.getTime(); 
                     });
-
                     return (
                       <div key={i} className="cal-cell">
-                        <div className="cal-date" style={{color: date.getDay()===0 ? 'red' : (date.getDay()===6 ? 'blue' : '#666')}}>
+                        <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#666')}}>
                           {date.getDate()}
                         </div>
                         {dayEvents.map((ev, idx) => (
-                          <div 
-                            key={idx} 
-                            className={`cal-event ${getBadgeClass(ev.room, ev.status)}`}
-                            onClick={() => setSelectedEvent(ev)}
-                          >
-                            [{ev.room.slice(0,1)}] {ev.name} ({ev.nights}박 {ev.guests}인)
+                          <div key={idx} className={`cal-event ${getBadgeClass(ev.room, ev.status)}`} onClick={() => setSelectedEvent(ev)}>
+                            {ev.name} ({ev.nights}박)
                           </div>
                         ))}
                       </div>
@@ -376,74 +402,170 @@
               </div>
             )}
 
+            {/* 3. 예약자료 탭 */}
             {activeTab === '예약자료' && (
               <div>
-                <h3 style={{marginTop:0}}>통합 마스터 데이터 ({validData.length}건)</h3>
+                <h3 style={{marginTop:0}}>총 누적 예약 ({validData.length}건)</h3>
                 {validData.map((d, idx) => (
                   <div key={idx} className={`card ${d.status === '취소' ? 'canceled' : ''}`}>
-                    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                       <div>
                         <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
-                        <strong style={{marginLeft: '8px'}}>{d.name}</strong> ({d.guests}인)
+                        <strong style={{marginLeft: '8px', fontSize: '15px'}}>{d.name}</strong> 
+                        <span style={{fontSize: '13px', marginLeft:'4px', color:'#777'}}>({d.guests}인)</span>
                       </div>
-                      <span style={{fontSize: '12px', color:'#888'}}>{d.source} | {d.status}</span>
+                      <span style={{fontSize: '12px', color:'#999'}}>{d.source} | {d.status}</span>
                     </div>
-                    <div style={{fontSize: '13px', marginTop: '8px'}}>
-                      {formatDate(d.start)} ~ {formatDate(d.end)} ({d.nights}박)
+                    <div style={{fontSize: '13px', marginTop: '10px', color:'#444'}}>
+                      {formatDate(d.start)} ~ {formatDate(d.end)} <strong style={{color:'#2c3e50'}}>({d.nights}박)</strong>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
+            {/* 4. 확인필요 탭 */}
+            {activeTab === '확인필요' && (
+              <div>
+                <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 크로스 체크 (불일치 내역)</h3>
+                <p style={{fontSize:'13px', color:'#666'}}>예약 중복이나 엑셀-캘린더 간 취소 상태가 다른 건을 잡아냅니다.</p>
+                {conflicts.length > 0 ? conflicts.map((c, i) => (
+                  <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c', paddingLeft:'15px'}}>
+                    <strong>[{c.type}]</strong> <span style={{color:'#555', fontSize:'14px'}}>{c.date}</span>
+                    <ul style={{fontSize:'13px', paddingLeft:'20px', marginTop:'10px', lineHeight:'1.6'}}>
+                      {c.items.map(item => (
+                        <li key={item.id}>
+                          <span className={`badge ${getBadgeClass(item.room, item.status)}`}>{item.room}</span> 
+                          {item.name} ({item.source}: {item.status})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )) : (
+                  <div className="card" style={{textAlign:'center', padding:'40px 20px'}}>
+                    <div style={{fontSize:'30px', marginBottom:'10px'}}>✅</div>
+                    <div style={{color:'#27ae60', fontWeight:'bold'}}>충돌하거나 확인이 필요한 예약이 없습니다.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 5. 이용통계 탭 */}
+            {activeTab === '이용통계' && (
+              <div>
+                <h3 style={{marginTop:0}}>📊 종합 이용 통계 (확정 건 기준)</h3>
+                <div className="stats-grid">
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 예약건수</div>
+                    <div className="stat-num">{totalRes}<span style={{fontSize:'16px'}}>건</span></div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 / 평균 숙박일</div>
+                    <div className="stat-num">{totalNights}<span style={{fontSize:'16px'}}>박</span> <span style={{fontSize:'16px', color:'#aaa'}}>/ {avgNights}박</span></div>
+                  </div>
+                  <div className="stat-box">
+                    <div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 / 평균 인원수</div>
+                    <div className="stat-num">{totalGuests}<span style={{fontSize:'16px'}}>명</span> <span style={{fontSize:'16px', color:'#aaa'}}>/ {avgGuests}명</span></div>
+                  </div>
+                </div>
+
+                <div className="stats-grid">
+                  <div className="card" style={{flex:1}}>
+                    <h4 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50'}}>객실별 점유 현황</h4>
+                    <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                      {['앞집', '뒷집', '언덕집'].map(r => (
+                        <div key={r} style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                          <span className={`badge ${getBadgeClass(r, '확정')}`}>{r}</span>
+                          <div style={{fontSize:'14px', fontWeight:'bold'}}>{roomStats[r]}건 <span style={{color:'#999', fontSize:'12px', fontWeight:'normal'}}>({totalRes ? Math.round(roomStats[r]/totalRes*100) : 0}%)</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="card" style={{flex:1}}>
+                    <h4 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50'}}>숙박 패턴 분석</h4>
+                    <ul style={{lineHeight:'2', color:'#444', margin:0, paddingLeft:'20px', fontSize:'14px'}}>
+                      <li><strong>평일(월~목) 입실:</strong> {weekdayCount}건</li>
+                      <li><strong>주말(금~일) 입실:</strong> {weekendCount}건</li>
+                      <li style={{marginTop:'10px', borderTop:'1px dashed #eee', paddingTop:'10px'}}>
+                        <strong>연박 현황:</strong><br/>
+                        {Object.entries(nightsStats).sort((a,b)=>a[0]-b[0]).map(([n, c]) => (
+                          <span key={n} style={{display:'inline-block', marginRight:'15px', background:'#f8f9fa', padding:'3px 8px', borderRadius:'4px', fontSize:'12px', marginTop:'5px'}}>
+                            {n}박: <strong style={{color:'#2c3e50'}}>{c}건</strong>
+                          </span>
+                        ))}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. 직접입력 탭 */}
             {activeTab === '직접입력' && (
               <div>
                 <h3 style={{marginTop:0}}>✏️ 수기 예약 직접 입력</h3>
                 <div className="card" style={{maxWidth:'600px', margin:'0 auto'}}>
+                  <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>예약 장소</label>
                   <select value={form.room} onChange={e => setForm({...form, room: e.target.value})}>
                     <option value="언덕집">언덕집</option><option value="앞집">앞집</option><option value="뒷집">뒷집</option>
                   </select>
-                  <input type="text" placeholder="예약자 이름 (예: 홍길동)" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                  
+                  <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>예약자 성함</label>
+                  <input type="text" placeholder="예: 홍길동" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                  
                   <div style={{display:'flex', gap:'10px'}}>
-                    <input type="date" value={form.start} onChange={e => setForm({...form, start: e.target.value})} />
-                    <input type="date" value={form.end} onChange={e => setForm({...form, end: e.target.value})} />
+                    <div style={{flex:1}}>
+                      <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>체크인</label>
+                      <input type="date" value={form.start} onChange={e => setForm({...form, start: e.target.value})} />
+                    </div>
+                    <div style={{flex:1}}>
+                      <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>체크아웃</label>
+                      <input type="date" value={form.end} onChange={e => setForm({...form, end: e.target.value})} />
+                    </div>
                   </div>
                   <div style={{display:'flex', gap:'10px'}}>
-                    <input type="number" min="1" placeholder="인원" value={form.guests} onChange={e => setForm({...form, guests: e.target.value})} />
-                    <input type="text" placeholder="연락처 (예: 010-1234-5678)" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} />
+                    <div style={{flex:1}}>
+                      <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>인원 수</label>
+                      <input type="number" min="1" placeholder="예: 2" value={form.guests} onChange={e => setForm({...form, guests: e.target.value})} />
+                    </div>
+                    <div style={{flex:2}}>
+                      <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>연락처</label>
+                      <input type="text" placeholder="예: 010-1234-5678" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} />
+                    </div>
                   </div>
-                  <textarea rows="3" placeholder="메모 (예약 플랫폼 등)" value={form.memo} onChange={e => setForm({...form, memo: e.target.value})}></textarea>
-                  <button className="btn" onClick={handleManualSubmit}>데이터 저장 및 업데이트</button>
+                  <label style={{fontSize:'12px', fontWeight:'bold', color:'#555'}}>특이사항 / 메모</label>
+                  <textarea rows="3" placeholder="예약 플랫폼, 추가 요청사항 등 기입" value={form.memo} onChange={e => setForm({...form, memo: e.target.value})}></textarea>
+                  <button className="btn" onClick={handleManualSubmit}>데이터 저장 및 연동</button>
                 </div>
-              </div>
-            )}
-
-            {(activeTab === '확인필요' || activeTab === '이용통계') && (
-              <div className="card" style={{textAlign:'center', padding:'40px 0', color:'#666'}}>
-                현재 <strong>{activeTab}</strong> 화면입니다. 
               </div>
             )}
           </div>
 
+          {/* 달력 이벤트 상세 팝업 */}
           {selectedEvent && (
             <div className="modal-overlay" onClick={() => setSelectedEvent(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <h3 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50'}}>
-                  <span className={`badge ${getBadgeClass(selectedEvent.room, selectedEvent.status)}`}>{selectedEvent.room}</span> {selectedEvent.name}
+                <h3 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50', display:'flex', alignItems:'center', gap:'8px'}}>
+                  <span className={`badge ${getBadgeClass(selectedEvent.room, selectedEvent.status)}`} style={{margin:0}}>{selectedEvent.room}</span> 
+                  {selectedEvent.name}
                 </h3>
-                <p style={{fontSize:'14px'}}><strong>일정:</strong> {formatDate(selectedEvent.start)} ~ {formatDate(selectedEvent.end)} ({selectedEvent.nights}박)</p>
-                <p style={{fontSize:'14px'}}><strong>인원:</strong> {selectedEvent.guests}인</p>
-                <div style={{background:'#f8f9fa', padding:'15px', borderRadius:'8px', marginTop:'15px', border:'1px solid #eee'}}>
-                  <p style={{margin:'0 0 10px 0', fontSize:'14px', color:'#d35400'}}><strong>📞 연락처:</strong> {selectedEvent.contact || '기재 안됨'}</p>
-                  <p style={{margin:0, fontSize:'14px', color:'#34495e'}}><strong>📝 메모/요청:</strong> {selectedEvent.memo || '없음'}</p>
+                <div style={{fontSize:'14px', color:'#444', lineHeight:'1.8'}}>
+                  <div><strong>📅 일정:</strong> {formatDate(selectedEvent.start)} ~ {formatDate(selectedEvent.end)} ({selectedEvent.nights}박)</div>
+                  <div><strong>👥 인원:</strong> {selectedEvent.guests}명</div>
                 </div>
-                <button className="btn" style={{marginTop:'20px', background:'#eee'}} onClick={() => setSelectedEvent(null)}>닫기</button>
+                <div style={{background:'#f8f9fa', padding:'15px', borderRadius:'8px', marginTop:'20px', border:'1px solid #eee', lineHeight:'1.8'}}>
+                  <div style={{fontSize:'15px', color:'#d35400', fontWeight:'bold'}}>📞 {selectedEvent.contact || '연락처 미기재'}</div>
+                  <div style={{fontSize:'14px', color:'#34495e', marginTop:'5px'}}>📝 {selectedEvent.memo || '요청사항/메모 없음'}</div>
+                </div>
+                <button className="btn" style={{marginTop:'20px', background:'#e9ecef', color:'#495057'}} onClick={() => setSelectedEvent(null)}>닫기</button>
               </div>
             </div>
           )}
         </div>
       );
     }
+    
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
