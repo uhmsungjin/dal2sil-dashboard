@@ -9,14 +9,17 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    body { margin: 0; background-color: #f9f9f9; font-family: -apple-system, sans-serif; }
+    body { margin: 0; background-color: #f4f6f8; font-family: -apple-system, sans-serif; }
     .mobile-container { max-width: 430px; margin: 0 auto; background: white; min-height: 100vh; display: flex; flex-direction: column; }
-    header { background: #333; color: white; padding: 20px; border-bottom: 3px solid #eee;}
-    main { padding: 20px; flex: 1; }
-    nav { display: flex; border-top: 1px solid #ddd; position: sticky; bottom: 0; background: white; padding-bottom: 20px;}
-    nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #aaa; font-size: 13px;}
-    nav button.active { font-weight: bold; color: #111; }
-    .data-card { background: #fff; border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    header { background: #2c3e50; color: white; padding: 20px; }
+    main { padding: 20px; flex: 1; overflow-y: auto; padding-bottom: 80px; }
+    nav { display: flex; border-top: 1px solid #ddd; position: fixed; bottom: 0; width: 100%; max-width: 430px; background: white; z-index: 100;}
+    nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 13px;}
+    nav button.active { font-weight: bold; color: #2c3e50; border-top: 3px solid #2c3e50; }
+    .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; }
+    .bg-front { background: #e74c3c; } .bg-back { background: #3498db; } .bg-hill { background: #27ae60; }
+    input[type="text"], input[type="date"] { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box;}
   </style>
 </head>
 <body>
@@ -25,148 +28,193 @@
     function App() {
       const [activeTab, setActiveTab] = React.useState('예약자료');
       const tabs = ['예약자료', '확인필요', '운영관리', '이용통계', '직접입력'];
-
-      // 파일과 데이터를 저장할 공간
+      
       const [excelFile, setExcelFile] = React.useState(null);
       const [icsFile, setIcsFile] = React.useState(null);
       const [mergedData, setMergedData] = React.useState([]);
+      const [manualData, setManualData] = React.useState([]); // 직접 입력 데이터
       const [isSyncing, setIsSyncing] = React.useState(false);
 
-      // 데이터 연동(분석) 버튼을 눌렀을 때 실행되는 함수
+      // [직접입력] 폼 상태
+      const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: '', contact: '' });
+
       const handleSync = () => {
-        if (!excelFile || !icsFile) {
-          alert("엑셀 파일과 캘린더 파일(.ics)을 모두 선택해주세요!");
-          return;
-        }
+        if (!excelFile || !icsFile) return alert("두 파일을 모두 선택해주세요!");
         setIsSyncing(true);
 
-        // 1. 엑셀 파일 읽기
         const readerX = new FileReader();
         readerX.onload = (e) => {
-          const data = e.target.result;
-          const wb = XLSX.read(data, { type: 'binary' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(ws, { range: 2 }); // 3번째 줄부터 데이터
+          const wb = XLSX.read(e.target.result, { type: 'binary' });
+          const jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: 2 });
 
-          const parsedEx = jsonData.map((row, idx) => ({
-            id: 'excel_' + idx,
-            source: '네이버 엑셀',
-            room: String(row['객실'] || '').includes('앞집') ? '앞집' : (String(row['객실'] || '').includes('뒷집') ? '뒷집' : '언덕집/기타'),
-            name: row['예약자'] || '미상',
-            date: row['이용기간'] || '날짜 없음',
-            status: row['상태'] || ''
-          }));
+          const parsedEx = jsonData.map((row, idx) => {
+            const rawDate = row['이용기간'] || '';
+            const isCanceled = (row['상태'] || '').includes('취소');
+            return {
+              id: 'ex_' + idx, source: '엑셀',
+              room: String(row['객실']).includes('앞집') ? '앞집' : (String(row['객실']).includes('뒷집') ? '뒷집' : '언덕집'),
+              name: row['예약자'] || '미상',
+              dateStr: rawDate,
+              status: isCanceled ? '취소' : '확정',
+              contact: row['전화번호'] || '',
+              guests: row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.'] || '2인'
+            };
+          });
 
-          // 2. 캘린더(ICS) 파일 읽기
           const readerI = new FileReader();
           readerI.onload = (e2) => {
-            const text = e2.target.result;
-            const events = text.split('BEGIN:VEVENT').slice(1);
-            
+            const events = e2.target.result.split('BEGIN:VEVENT').slice(1);
             const parsedIc = events.map((ev, idx) => {
-              const summaryMatch = ev.match(/SUMMARY:(.*)/);
-              const summary = summaryMatch ? summaryMatch[1] : '';
-              let room = '기타';
-              if(summary.includes('앞집')) room = '앞집';
-              if(summary.includes('뒷집')) room = '뒷집';
-              if(summary.includes('언덕집')) room = '언덕집';
-
+              const sumMatch = ev.match(/SUMMARY:(.*)/);
+              const summary = sumMatch ? sumMatch[1] : '';
+              let r = '기타';
+              if(summary.includes('앞집')) r = '앞집';
+              if(summary.includes('뒷집')) r = '뒷집';
+              if(summary.includes('언덕집')) r = '언덕집';
+              const isCanceled = summary.includes('취소') || ev.includes('취소');
+              
               return {
-                id: 'ics_' + idx,
-                source: 'ICS 캘린더',
-                room: room,
-                name: summary, // 임시로 전체 요약 내용 표시
-                date: '캘린더 일정',
-                status: summary.includes('취소') ? '취소됨' : '확정'
+                id: 'ic_' + idx, source: '캘린더', room: r,
+                name: summary.split('/')[0].replace(/\[|\]/g, '').trim(),
+                dateStr: '캘린더 일정',
+                status: isCanceled ? '취소' : '확정',
+                contact: (ev.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0],
+                guests: (summary.match(/\d+인|\d+명/) || [''])[0]
               };
             });
-
-            // 3. 두 데이터 합치기
             setMergedData([...parsedEx, ...parsedIc]);
             setIsSyncing(false);
-            alert("두 파일의 데이터 연동이 성공적으로 완료되었습니다!");
           };
           readerI.readAsText(icsFile);
         };
         readerX.readAsBinaryString(excelFile);
       };
 
+      const handleManualSubmit = () => {
+        if(!form.name || !form.start) return alert("이름과 체크인 날짜를 입력해주세요.");
+        const newData = {
+          id: 'man_' + Date.now(), source: '직접입력', room: form.room, name: form.name, 
+          dateStr: `${form.start} ~ ${form.end}`, status: '확정', contact: form.contact, guests: form.guests
+        };
+        setManualData([...manualData, newData]);
+        alert("저장되었습니다! 예약자료 및 통계에 반영됩니다.");
+        setForm({ room: '언덕집', name: '', start: '', end: '', guests: '', contact: '' });
+      };
+
+      // 화면에 보여줄 전체 데이터 (파일 데이터 + 수기 입력 데이터)
+      const displayData = [...mergedData, ...manualData];
+      const activeCount = displayData.filter(d => d.status !== '취소').length;
+
+      const getRoomColor = (room) => {
+        if(room === '앞집') return 'bg-front';
+        if(room === '뒷집') return 'bg-back';
+        if(room === '언덕집') return 'bg-hill';
+        return '';
+      };
+
       return (
         <div className="mobile-container">
           <header>
-            <h2 style={{margin: '0 0 15px 0', fontSize: '20px'}}>🌙 스테이 달이실 관리</h2>
-            
-            <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-              <label style={{fontSize: '13px', color: '#ccc'}}>1. 엑셀 파일 (.xlsx)</label>
-              <input type="file" accept=".xlsx" style={{fontSize: '14px', color: '#fff'}} onChange={e => setExcelFile(e.target.files[0])} />
-              
-              <label style={{fontSize: '13px', color: '#ccc', marginTop: '10px'}}>2. 캘린더 파일 (.ics)</label>
-              <input type="file" accept=".ics" style={{fontSize: '14px', color: '#fff'}} onChange={e => setIcsFile(e.target.files[0])} />
+            <h2 style={{margin: '0 0 10px 0', fontSize: '18px'}}>🌙 스테이 달이실 대시보드</h2>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '12px'}}>
+              <input type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} />
+              <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} />
+              <button onClick={handleSync} style={{marginTop: '5px', padding: '10px', background: '#f1c40f', border: 'none', borderRadius: '5px', fontWeight: 'bold'}}>
+                {isSyncing ? '분석 중...' : '파일 2개 연동하기'}
+              </button>
             </div>
-
-            {/* 새로 추가된 데이터 연동 버튼 */}
-            <button 
-              onClick={handleSync}
-              disabled={isSyncing}
-              style={{
-                marginTop: '20px', padding: '15px', width: '100%', 
-                backgroundColor: '#FFBB00', color: '#333', 
-                border: 'none', borderRadius: '8px', 
-                fontSize: '15px', fontWeight: 'bold', cursor: 'pointer'
-              }}
-            >
-              {isSyncing ? '데이터 분석 중...' : '데이터 연동하기'}
-            </button>
           </header>
 
           <main>
             {activeTab === '예약자료' && (
               <div>
-                <h3 style={{fontSize: '16px', margin: '0 0 15px 0'}}>통합 예약 리스트</h3>
-                {mergedData.length === 0 ? (
-                  <p style={{fontSize: '14px', color: '#888', textAlign: 'center', marginTop: '40px'}}>
-                    상단에서 파일을 선택하고<br/>연동하기 버튼을 눌러주세요.
-                  </p>
-                ) : (
-                  <div>
-                    <p style={{fontSize: '13px', color: '#666', marginBottom: '15px'}}>총 {mergedData.length}건의 데이터가 로드되었습니다.</p>
-                    {mergedData.map(data => (
-                      <div key={data.id} className="data-card">
-                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '5px'}}>
-                          <strong style={{color: data.room.includes('앞집') ? '#e74c3c' : (data.room.includes('뒷집') ? '#3498db' : '#27ae60')}}>
-                            [{data.room}]
-                          </strong>
-                          <span style={{fontSize: '12px', color: '#999'}}>{data.source}</span>
-                        </div>
-                        <div style={{fontSize: '14px', fontWeight: 'bold', marginBottom: '5px'}}>{data.name}</div>
-                        <div style={{fontSize: '13px', color: '#555'}}>{data.date}</div>
-                        <div style={{fontSize: '12px', color: data.status.includes('취소') ? 'red' : 'blue', marginTop: '5px'}}>
-                          상태: {data.status}
-                        </div>
-                      </div>
-                    ))}
+                <h4>전체 예약 리스트 ({displayData.length}건)</h4>
+                {displayData.map(d => (
+                  <div key={d.id} className="card">
+                    <span className={`badge ${getRoomColor(d.room)}`}>{d.room}</span>
+                    <span style={{float: 'right', fontSize:'12px', color: '#888'}}>{d.source}</span>
+                    <div style={{marginTop: '8px', fontWeight: 'bold'}}>{d.name} {d.guests && `(${d.guests})`}</div>
+                    <div style={{fontSize: '13px', color: '#555', marginTop: '4px'}}>{d.dateStr}</div>
+                    <div style={{fontSize: '12px', color: d.status === '취소' ? 'red' : 'blue', marginTop: '4px'}}>{d.status}</div>
                   </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === '확인필요' && (
+              <div>
+                <h4>⚠️ 확인 필요 (불일치 / 중복)</h4>
+                <p style={{fontSize:'13px', color:'#666'}}>캘린더에는 있으나 엑셀에서 취소된 항목 등을 표시합니다.</p>
+                {displayData.filter(d => d.status === '취소' && d.source === '캘린더').length > 0 ? (
+                  displayData.filter(d => d.status === '취소' && d.source === '캘린더').map(d => (
+                    <div key={d.id} className="card" style={{borderLeft: '4px solid red'}}>
+                      <strong>[{d.room}] {d.name}</strong><br/>
+                      <span style={{fontSize:'13px'}}>상태: 취소됨 (캘린더 확인 요망)</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="card" style={{textAlign:'center', color:'#888'}}>충돌 사항이 없습니다.</div>
                 )}
               </div>
             )}
 
-            {/* 다른 탭들은 임시 메시지 출력 */}
-            {activeTab !== '예약자료' && (
-              <div style={{marginTop: '30px', padding: '20px', background: '#f0f0f0', borderRadius: '10px', textAlign: 'center', color: '#555'}}>
-                현재 <strong>{activeTab}</strong> 화면입니다.<br/>(데이터 연동 후 분석 결과가 이곳에 표시됩니다.)
+            {activeTab === '운영관리' && (
+              <div>
+                <h4>📅 모바일 운영 캘린더</h4>
+                <p style={{fontSize:'13px', color:'#666'}}>최근 확정된 일정 리스트입니다.</p>
+                {displayData.filter(d => d.status === '확정').slice(0, 10).map(d => (
+                  <div key={d.id} className="card">
+                    <div style={{fontSize: '14px', fontWeight: 'bold'}}><span className={`badge ${getRoomColor(d.room)}`}>{d.room}</span> {d.dateStr}</div>
+                    <div style={{fontSize: '13px', marginTop: '8px'}}>예약자: {d.name} {d.guests && `(${d.guests})`}</div>
+                    {d.contact && <div style={{fontSize: '13px'}}>연락처: {d.contact}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === '이용통계' && (
+              <div>
+                <h4>📊 이용 통계 요약</h4>
+                <div className="card">
+                  <p><strong>총 확정 예약:</strong> {activeCount} 건</p>
+                  <p><strong>앞집 예약:</strong> {displayData.filter(d => d.room === '앞집' && d.status === '확정').length} 건</p>
+                  <p><strong>뒷집 예약:</strong> {displayData.filter(d => d.room === '뒷집' && d.status === '확정').length} 건</p>
+                  <p><strong>언덕집 예약:</strong> {displayData.filter(d => d.room === '언덕집' && d.status === '확정').length} 건</p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === '직접입력' && (
+              <div>
+                <h4>✏️ 언덕집 등 수기 예약 입력</h4>
+                <div className="card">
+                  <label style={{fontSize:'12px'}}>객실 선택</label>
+                  <select style={{width:'100%', padding:'10px', marginBottom:'10px'}} value={form.room} onChange={e => setForm({...form, room: e.target.value})}>
+                    <option value="언덕집">언덕집</option><option value="앞집">앞집</option><option value="뒷집">뒷집</option>
+                  </select>
+                  
+                  <label style={{fontSize:'12px'}}>예약자 이름</label>
+                  <input type="text" placeholder="예: 홍길동" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                  
+                  <label style={{fontSize:'12px'}}>체크인</label>
+                  <input type="date" value={form.start} onChange={e => setForm({...form, start: e.target.value})} />
+                  
+                  <label style={{fontSize:'12px'}}>체크아웃</label>
+                  <input type="date" value={form.end} onChange={e => setForm({...form, end: e.target.value})} />
+                  
+                  <label style={{fontSize:'12px'}}>인원 및 연락처</label>
+                  <input type="text" placeholder="예: 4인, 010-1234-5678" value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} />
+                  
+                  <button onClick={handleManualSubmit} style={{width:'100%', padding:'12px', background:'#2c3e50', color:'white', border:'none', borderRadius:'5px'}}>등록하기</button>
+                </div>
+                <p style={{fontSize:'11px', color:'#999'}}>* 이곳에서 입력한 데이터는 앱을 새로고침하기 전까지 다른 탭(통계, 운영 등)과 실시간 연동됩니다.</p>
               </div>
             )}
           </main>
 
           <nav>
             {tabs.map(tab => (
-              <button 
-                key={tab} 
-                className={activeTab === tab ? 'active' : ''}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab}
-              </button>
+              <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>
             ))}
           </nav>
         </div>
