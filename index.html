@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>스테이 달이실 관리</title>
+  <!-- 파일 분석과 화면 구성을 위한 필수 도구 불러오기 -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* 아이폰 화면 사이즈에 맞춘 디자인 세팅 */
+    body { margin: 0; background-color: #f9f9f9; font-family: -apple-system, sans-serif; }
+    .mobile-container { max-width: 430px; margin: 0 auto; background: white; min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: #333; color: white; padding: 20px; border-bottom: 3px solid #eee;}
+    main { padding: 20px; flex: 1; }
+    nav { display: flex; border-top: 1px solid #ddd; position: sticky; bottom: 0; background: white; padding-bottom: 20px;}
+    nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #aaa; font-size: 13px;}
+    nav button.active { font-weight: bold; color: #111; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    function App() {
+      const [activeTab, setActiveTab] = React.useState('예약자료');
+      const tabs = ['예약자료', '확인필요', '운영관리', '이용통계', '직접입력'];
+
+      return (
+        <div className="mobile-container">
+          <header>
+            <h2 style={{margin: '0 0 15px 0', fontSize: '20px'}}>🌙 스테이 달이실 관리</h2>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+              <label style={{fontSize: '13px', color: '#ccc'}}>1. 엑셀 파일 (.xlsx)</label>
+              <input type="file" accept=".xlsx" style={{fontSize: '14px', color: '#fff'}} />
+              <label style={{fontSize: '13px', color: '#ccc', marginTop: '10px'}}>2. 캘린더 파일 (.ics)</label>
+              <input type="file" accept=".ics" style={{fontSize: '14px', color: '#fff'}} />
+            </div>
+          </header>
+          <main>
+            <p style={{fontSize: '15px', color: '#666', lineHeight: '1.5'}}>
+              상단에 엑셀과 ics 파일을 업로드하면<br/>이곳에 <strong>{activeTab}</strong> 데이터가 연동됩니다.
+            </p>
+            <div style={{marginTop: '30px', padding: '20px', background: '#f0f0f0', borderRadius: '10px', textAlign: 'center'}}>
+              현재 {activeTab} 화면입니다.
+            </div>
+          </main>
+          <nav>
+            {tabs.map(tab => (
+              <button 
+                key={tab} 
+                className={activeTab === tab ? 'active' : ''}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+        </div>
+      );
+    }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
