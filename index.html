@@ -18,7 +18,6 @@
     body { margin: 0; background-color: #f8f9fa; font-family: -apple-system, sans-serif; color: #333; }
     .app-container { display: flex; flex-direction: column; min-height: 100vh; }
     
-    /* 로고가 들어간 헤더 디자인 */
     header { background: #2c3e50; color: white; padding: 25px 20px 20px; text-align: center; border-bottom: 3px solid #FFBB00;}
     .header-logo { max-height: 45px; margin-bottom: 10px; }
     
@@ -27,18 +26,16 @@
     .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
     .card.canceled { background-color: #f8f9fa; color: #adb5bd; border-color: #e9ecef; }
     
-    /* 파스텔톤 색상 뱃지 */
     .badge { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-block; margin-bottom: 5px;}
-    .bg-front { background: #ffe3e3; color: #c0392b; border: 1px solid #ffbaba; } /* 앞집: 파스텔 빨강 */
-    .bg-back { background: #d4e6f1; color: #2980b9; border: 1px solid #a9cce3; } /* 뒷집: 파스텔 파랑 */
-    .bg-hill { background: #d5f5e3; color: #27ae60; border: 1px solid #abebc6; } /* 언덕집: 파스텔 초록 */
-    .bg-gray { background: #f2f4f4; color: #7f8c8d; border: 1px solid #d5dbdb; } /* 취소: 밝은 회색 */
+    .bg-front { background: #ffe3e3; color: #c0392b; border: 1px solid #ffbaba; } 
+    .bg-back { background: #d4e6f1; color: #2980b9; border: 1px solid #a9cce3; } 
+    .bg-hill { background: #d5f5e3; color: #27ae60; border: 1px solid #abebc6; } 
+    .bg-gray { background: #f2f4f4; color: #7f8c8d; border: 1px solid #d5dbdb; } 
     
     input, select, textarea { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 14px;}
     .btn { padding: 14px; background: #FFBB00; color: #2c3e50; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; transition: 0.2s;}
     .btn:hover { background: #f39c12; }
     
-    /* 달력 CSS */
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: white; padding: 10px; border-radius: 10px; border: 1px solid #eee; }
     .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden;}
     .cal-header { background: #f8f9fa; text-align: center; font-size: 12px; padding: 10px 0; font-weight: bold; color: #555; }
@@ -46,7 +43,6 @@
     .cal-date { font-size: 11px; color: #888; margin-bottom: 4px; font-weight: bold; }
     .cal-event { font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; line-height: 1.2; word-break: break-all; font-weight: 600;}
     
-    /* 통계 CSS */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-top: 15px; }
     .stat-box { background: white; padding: 20px; border-radius: 12px; border: 1px solid #eee; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
     .stat-num { font-size: 26px; font-weight: 800; color: #2c3e50; margin-top: 8px; }
@@ -54,7 +50,6 @@
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;}
     .modal-content { background: white; padding: 25px; border-radius: 16px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
 
-    /* 네비게이션바 - 모바일 스크롤 지원 */
     nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); overflow-x: auto; white-space: nowrap;}
     nav::-webkit-scrollbar { display: none; }
     nav button { flex: 1; min-width: 75px; padding: 16px 5px; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 13px; font-weight: 600;}
@@ -79,7 +74,6 @@
   <div id="root"></div>
   
   <script type="text/babel">
-    // 사용자님의 Firebase 설정 완벽 적용
     const firebaseConfig = {
       apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iFZk0OPNhA",
       authDomain: "dal2sil-db.firebaseapp.com",
@@ -169,6 +163,10 @@
               const dates = parseExcelDate(row['이용기간']);
               if(!dates) return;
               const rawRoom = String(row['객실'] || '');
+              
+              // 엑셀 메모 정제
+              let rawMemo = (row['직원메모'] || row['요청사항'] || '').trim();
+              
               exList.push({
                 room: rawRoom.includes('앞집') ? '앞집' : (rawRoom.includes('뒷집') ? '뒷집' : '언덕집'),
                 name: row['예약자'] || '미상',
@@ -176,7 +174,7 @@
                 status: String(row['상태'] || '').includes('취소') ? '취소' : '확정',
                 contact: row['전화번호'] || '',
                 guests: String(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.'] || '').match(/\d+/) ? parseInt(String(row['예약자입력정보3-<앞집>에 방문하는 인원을 알려주세요.'] || row['예약자입력정보4-<뒷집>에 방문하는 인원을 알려주세요.'] || '').match(/\d+/)[0]) : 2,
-                memo: row['직원메모'] || row['요청사항'] || '',
+                memo: rawMemo,
                 source: '엑셀'
               });
             });
@@ -196,19 +194,31 @@
                   const sDate = new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8));
                   const eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
                   const nights = Math.round((eDate - sDate)/(1000*60*60*24));
-                  const desc = (ev.match(/DESCRIPTION:([\s\S]*?)(?=\n[A-Z\-]+:|$)/) || ['', ''])[1].replace(/\\n/g, ' ');
+                  
+                  // ★ 수정됨: 콜론(:) 외에 세미콜론(;) 앞에서도 끊도록 정규식 개선
+                  let desc = (ev.match(/DESCRIPTION:([\s\S]*?)(?=\r?\n[A-Z\-]+[:;]|$)/) || ['', ''])[1].replace(/\\n/g, ' ').trim();
+                  // ★ 혹시 남아있을 수 있는 명령어 완벽 차단
+                  desc = desc.replace(/DTEND.*?$/g, '').replace(/DTSTART.*?$/g, '').trim();
 
                   let r = '기타';
                   if(summary.includes('앞집')) r = '앞집';
                   if(summary.includes('뒷집')) r = '뒷집';
                   if(summary.includes('언덕집')) r = '언덕집';
 
+                  // 연락처 추출
+                  let contact = (summary.match(/010[-]?\d{4}[-]?\d{4}/) || desc.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0];
+                  
+                  // 메모에서 중복되는 전화번호 텍스트 제거하여 깔끔하게 만들기
+                  if (contact) {
+                    desc = desc.replace(contact, '').trim();
+                  }
+
                   icList.push({
                     room: r,
                     name: summary.split('/')[0].replace(/\[|\]/g, '').trim(),
                     start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
-                    contact: (summary.match(/010[-]?\d{4}[-]?\d{4}/) || desc.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0],
+                    contact: contact,
                     guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2,
                     memo: desc,
                     source: '캘린더'
@@ -223,10 +233,19 @@
                   const key = `${ex.room}_${formatDate(ex.start)}`;
                   const existing = dataMap.get(key); 
                   if (existing) {
+                    // ★ 수정됨: 메모 병합 시 빈칸은 제외하고 중복 제거하여 파이프(|) 누적 방지
+                    let exMemoClean = ex.memo;
+                    if (existing.contact) exMemoClean = exMemoClean.replace(existing.contact, '').trim();
+                    
+                    const memoParts = [];
+                    if (existing.memo) memoParts.push(existing.memo);
+                    if (exMemoClean) memoParts.push(exMemoClean);
+                    const finalMemo = [...new Set(memoParts)].join(" | ");
+
                     dataMap.set(key, {
                       ...ex, 
                       contact: existing.contact ? existing.contact : ex.contact,
-                      memo: (existing.memo ? existing.memo + " | " : "") + ex.memo,
+                      memo: finalMemo,
                       source: '통합(완료)'
                     });
                   } else {
@@ -239,7 +258,7 @@
                 alert("클라우드 연동 완료! 통계 및 운영 캘린더가 최신화되었습니다.");
                 setIsSyncing(false);
                 setExcelFile(null); setIcsFile(null);
-                setActiveTab('운영관리'); // 연동 완료 후 달력으로 이동
+                setActiveTab('운영관리');
               } catch(err) { alert("캘린더 파일 분석 중 오류 발생"); setIsSyncing(false); }
             };
             readerI.readAsText(icsFile);
@@ -264,13 +283,11 @@
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
       };
 
-      // 파스텔 뱃지 클래스
       const getBadgeClass = (r, s) => {
         if(s === '취소') return 'bg-gray';
         return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
       };
 
-      // ---------------- 기능: 확인필요 & 통계 & 데이터 ----------------
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
       const activeData = validData.filter(d => d.status !== '취소');
       
@@ -314,7 +331,6 @@
       };
       const conflicts = getConflicts();
 
-      // 달력 계산
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -341,12 +357,9 @@
 
           <div className="content">
             
-            {/* 1. 파일연동 탭 (신규) */}
             {activeTab === '파일연동' && (
               <div>
-                <h3 style={{marginTop:0, display:'flex', alignItems:'center', gap:'8px'}}>
-                  ☁️ 클라우드 파일 연동
-                </h3>
+                <h3 style={{marginTop:0, display:'flex', alignItems:'center', gap:'8px'}}>☁️ 클라우드 파일 연동</h3>
                 <div className="upload-section">
                   <p style={{fontSize:'14px', color:'#666', marginTop:0, marginBottom:'20px'}}>
                     엑셀과 캘린더 파일을 올려 최신 예약 정보를 모든 기기에 동기화하세요.
@@ -366,7 +379,6 @@
               </div>
             )}
 
-            {/* 2. 운영관리 탭 */}
             {activeTab === '운영관리' && (
               <div>
                 <h3 style={{marginTop:0}}>📅 월별 예약 캘린더</h3>
@@ -402,7 +414,6 @@
               </div>
             )}
 
-            {/* 3. 예약자료 탭 */}
             {activeTab === '예약자료' && (
               <div>
                 <h3 style={{marginTop:0}}>총 누적 예약 ({validData.length}건)</h3>
@@ -424,7 +435,6 @@
               </div>
             )}
 
-            {/* 4. 확인필요 탭 */}
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 크로스 체크 (불일치 내역)</h3>
@@ -450,7 +460,6 @@
               </div>
             )}
 
-            {/* 5. 이용통계 탭 */}
             {activeTab === '이용통계' && (
               <div>
                 <h3 style={{marginTop:0}}>📊 종합 이용 통계 (확정 건 기준)</h3>
@@ -501,7 +510,6 @@
               </div>
             )}
 
-            {/* 6. 직접입력 탭 */}
             {activeTab === '직접입력' && (
               <div>
                 <h3 style={{marginTop:0}}>✏️ 수기 예약 직접 입력</h3>
@@ -542,7 +550,6 @@
             )}
           </div>
 
-          {/* 달력 이벤트 상세 팝업 */}
           {selectedEvent && (
             <div className="modal-overlay" onClick={() => setSelectedEvent(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
