@@ -10,7 +10,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
@@ -148,6 +147,34 @@
         } catch(e) { return null; }
       };
 
+      // 💡 [과거+현재 양식 완벽 호환] 캘린더(ICS)에서 이름 추출 함수
+      const extractName = (summary) => {
+        // [앞집] 박명옥 / 1박 형태
+        const matchBracket = summary.match(/\[.*?\]\s*([^/]+)/);
+        if (matchBracket) {
+          return matchBracket[1].split(',')[0].trim();
+        }
+        
+        // 앞집 / 1박 / 인원 / 이름,연락처 형태 (과거 캘린더)
+        const parts = summary.split('/');
+        for (let p of parts) {
+          p = p.trim();
+          if (p.includes(',') || p.includes('\\,')) {
+            return p.split(',')[0].replace(/\\/g, '').trim();
+          }
+        }
+        
+        // 쉼표가 없을 경우 뒤에서부터 검색해서 '박'이나 '인', '집' 글자가 없는 부분을 이름으로 간주
+        for (let i = parts.length - 1; i >= 0; i--) {
+          let p = parts[i].trim();
+          if (!p.includes('박') && !p.includes('인') && !p.includes('명') && !p.includes('집')) {
+             if(p.length >= 2 && p.length <= 10) return p;
+          }
+        }
+        
+        return summary.split('/')[0].replace(/\[|\]/g, '').trim();
+      };
+
       const handleSync = () => {
         if (!excelFile || !icsFile) return alert("엑셀과 캘린더(.ics) 파일을 모두 업로드해주세요.");
         setIsSyncing(true);
@@ -163,8 +190,6 @@
               const dates = parseExcelDate(row['이용기간']);
               if(!dates) return;
               const rawRoom = String(row['객실'] || '');
-              
-              // 엑셀 메모 정제
               let rawMemo = (row['직원메모'] || row['요청사항'] || '').trim();
               
               exList.push({
@@ -195,10 +220,9 @@
                   const eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
                   const nights = Math.round((eDate - sDate)/(1000*60*60*24));
                   
-                  // ★ 수정됨: 콜론(:) 외에 세미콜론(;) 앞에서도 끊도록 정규식 개선
+                  // 💡 [메모 청소 로직] 캘린더에서 특수문자, 시스템 명령어를 싹 잘라냅니다.
                   let desc = (ev.match(/DESCRIPTION:([\s\S]*?)(?=\r?\n[A-Z\-]+[:;]|$)/) || ['', ''])[1].replace(/\\n/g, ' ').trim();
-                  // ★ 혹시 남아있을 수 있는 명령어 완벽 차단
-                  desc = desc.replace(/DTEND.*?$/g, '').replace(/DTSTART.*?$/g, '').trim();
+                  desc = desc.replace(/DTEND.*?$/g, '').replace(/DTSTART.*?$/g, '').replace(/CLASS.*?$/g, '').trim();
 
                   let r = '기타';
                   if(summary.includes('앞집')) r = '앞집';
@@ -208,18 +232,18 @@
                   // 연락처 추출
                   let contact = (summary.match(/010[-]?\d{4}[-]?\d{4}/) || desc.match(/010[-]?\d{4}[-]?\d{4}/) || [''])[0];
                   
-                  // 메모에서 중복되는 전화번호 텍스트 제거하여 깔끔하게 만들기
+                  // 메모에서 중복 전화번호 삭제
                   if (contact) {
                     desc = desc.replace(contact, '').trim();
                   }
 
                   icList.push({
                     room: r,
-                    name: summary.split('/')[0].replace(/\[|\]/g, '').trim(),
+                    name: extractName(summary), // 새로 만든 이름 추출 함수 적용
                     start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
                     contact: contact,
-                    guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2,
+                    guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2, // 못 찾으면 기본 2인
                     memo: desc,
                     source: '캘린더'
                   });
@@ -233,14 +257,16 @@
                   const key = `${ex.room}_${formatDate(ex.start)}`;
                   const existing = dataMap.get(key); 
                   if (existing) {
-                    // ★ 수정됨: 메모 병합 시 빈칸은 제외하고 중복 제거하여 파이프(|) 누적 방지
+                    // 메모 병합 시 빈 공간이나 세로줄(|) 찌꺼기가 생기지 않도록 완벽 필터링
                     let exMemoClean = ex.memo;
-                    if (existing.contact) exMemoClean = exMemoClean.replace(existing.contact, '').trim();
+                    if (existing.contact && exMemoClean) exMemoClean = exMemoClean.replace(existing.contact, '').trim();
                     
                     const memoParts = [];
-                    if (existing.memo) memoParts.push(existing.memo);
-                    if (exMemoClean) memoParts.push(exMemoClean);
-                    const finalMemo = [...new Set(memoParts)].join(" | ");
+                    if (existing.memo && existing.memo.trim() !== '') memoParts.push(existing.memo.trim());
+                    if (exMemoClean && exMemoClean.trim() !== '') memoParts.push(exMemoClean.trim());
+                    
+                    // 중복 내용 제거 후 합치기
+                    const finalMemo = [...new Set(memoParts)].filter(m => !m.includes('DTEND') && !m.includes('|')).join(" | ");
 
                     dataMap.set(key, {
                       ...ex, 
@@ -258,6 +284,10 @@
                 alert("클라우드 연동 완료! 통계 및 운영 캘린더가 최신화되었습니다.");
                 setIsSyncing(false);
                 setExcelFile(null); setIcsFile(null);
+                
+                // 파일 연동 후 엑셀 업로드 칸을 깨끗하게 비우기 위한 리셋
+                document.querySelectorAll('input[type="file"]').forEach(el => el.value = "");
+                
                 setActiveTab('운영관리');
               } catch(err) { alert("캘린더 파일 분석 중 오류 발생"); setIsSyncing(false); }
             };
