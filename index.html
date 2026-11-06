@@ -4,10 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>스테이 달이실 스마트 대시보드</title>
+  
+  <!-- React 및 엑셀 파싱 라이브러리 -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- Firebase 실시간 클라우드 DB 연동 필수 스크립트 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
   <style>
     body { margin: 0; background-color: #f4f6f8; font-family: -apple-system, sans-serif; color: #333; }
     .app-container { display: flex; flex-direction: column; min-height: 100vh; }
@@ -23,7 +30,6 @@
     input, select, textarea { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-family: inherit;}
     .btn { padding: 12px; background: #FFBB00; color: #333; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; }
     
-    /* 캘린더 전용 CSS */
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
     .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #ddd; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;}
     .cal-header { background: #f8f9fa; text-align: center; font-size: 11px; padding: 8px 0; font-weight: bold; color: #555; }
@@ -31,11 +37,9 @@
     .cal-date { font-size: 11px; color: #666; margin-bottom: 4px; text-align: left; }
     .cal-event { font-size: 10px; padding: 4px; border-radius: 3px; color: #fff; cursor: pointer; line-height: 1.2; word-break: break-all; }
     
-    /* 모달 (팝업) CSS */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
     .modal-content { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
 
-    /* 네비게이션바 */
     nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
     nav button { flex: 1; padding: 15px 0; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 13px; font-weight: 500;}
     nav button.active { font-weight: bold; color: #2c3e50; }
@@ -61,49 +65,65 @@
   <div id="root"></div>
   
   <script type="text/babel">
-    // --- LocalStorage 커스텀 훅 (데이터 영구 저장용) ---
-    function useLocalStorage(key, initialValue) {
-      const [storedValue, setStoredValue] = React.useState(() => {
-        try {
-          const item = window.localStorage.getItem(key);
-          if (item) {
-            const parsed = JSON.parse(item);
-            return parsed.map(d => ({
-              ...d,
-              start: d.start ? new Date(d.start) : null,
-              end: d.end ? new Date(d.end) : null
-            }));
-          }
-          return initialValue;
-        } catch (error) { return initialValue; }
-      });
+    // ★★★ 아래 정보를 본인의 파이어베이스 설정값으로 교체하세요! ★★★
+    const firebaseConfig = {
+      apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iFZk0OPNhA",
+  authDomain: "dal2sil-db.firebaseapp.com",
+  projectId: "dal2sil-db",
+  storageBucket: "dal2sil-db.firebasestorage.app",
+  messagingSenderId: "1064972750915",
+  appId: "1:1064972750915:web:08072533df7408d28844f6"
+    };
 
-      const setValue = (value) => {
-        try {
-          setStoredValue(value);
-          window.localStorage.setItem(key, JSON.stringify(value));
-        } catch (error) {}
-      };
-      return [storedValue, setValue];
+    // Firebase 초기화
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
     }
+    const db = firebase.database();
 
     function App() {
-      const [activeTab, setActiveTab] = React.useState('운영관리'); // 기본 탭을 달력으로 설정
+      const [activeTab, setActiveTab] = React.useState('운영관리');
       const tabs = ['예약자료', '확인필요', '운영관리', '이용통계', '직접입력'];
       
       const [excelFile, setExcelFile] = React.useState(null);
       const [icsFile, setIcsFile] = React.useState(null);
       const [isSyncing, setIsSyncing] = React.useState(false);
       
-      // 저장소에서 통합 데이터 불러오기
-      const [allData, setAllData] = useLocalStorage('dal2sil_master_data', []);
+      // 클라우드 데이터를 담을 상태
+      const [allData, setAllData] = React.useState([]);
       
-      // 달력 및 모달 상태
       const [currentMonth, setCurrentMonth] = React.useState(new Date());
       const [selectedEvent, setSelectedEvent] = React.useState(null);
-
-      // 직접입력 폼
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
+
+      // 앱 실행 시 클라우드 DB에서 실시간 데이터 불러오기
+      React.useEffect(() => {
+        const ref = db.ref('dal2sil_reservations');
+        ref.on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            // DB에서 가져온 문자열 형태의 날짜를 다시 Date 객체로 변환
+            const parsedData = Object.values(data).map(d => ({
+              ...d,
+              start: d.start ? new Date(d.start) : null,
+              end: d.end ? new Date(d.end) : null
+            }));
+            setAllData(parsedData);
+          }
+        });
+        return () => ref.off();
+      }, []);
+
+      // 클라우드 DB에 데이터 저장 함수
+      const saveToCloud = (dataArray) => {
+        // Firebase에는 Date 객체를 통째로 넣을 수 없으므로 ISO 텍스트로 변환하여 저장
+        const cleanData = dataArray.map(d => ({
+          ...d,
+          start: d.start ? d.start.toISOString() : null,
+          end: d.end ? d.end.toISOString() : null
+        }));
+        db.ref('dal2sil_reservations').set(cleanData);
+      };
 
       const formatDate = (d) => {
         if (!d || isNaN(d.valueOf())) return '날짜미상';
@@ -127,8 +147,11 @@
         } catch(e) { return null; }
       };
 
-      // 🌟 데이터 스마트 병합 로직 (엑셀 + 캘린더 상호 보완)
+      // ★ 엑셀 + 캘린더 통합 로직 (연락처 ICS 우선 적용 반영)
       const handleSync = () => {
+        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+          return alert("Firebase 설정값이 입력되지 않았습니다. 코드 상단 설정값을 교체해주세요.");
+        }
         if (!excelFile || !icsFile) return alert("엑셀과 캘린더(.ics) 파일을 모두 업로드해주세요.");
         setIsSyncing(true);
 
@@ -189,29 +212,27 @@
                   });
                 });
 
-                // 기존 데이터 + 새 엑셀 + 새 캘린더 스마트 병합 (Key: 날짜+객실)
                 const dataMap = new Map();
                 
-                // 1. 기존 데이터 셋업
+                // 1. 기존 클라우드 데이터 세팅
                 allData.forEach(d => {
                   if(d.start && d.room !== '기타') dataMap.set(`${d.room}_${formatDate(d.start)}`, d);
                 });
 
-                // 2. 캘린더 데이터 덮어쓰기
+                // 2. 캘린더(ICS) 데이터 세팅 (이때 연락처가 들어감)
                 icList.forEach(ic => {
                   if(ic.room !== '기타') dataMap.set(`${ic.room}_${formatDate(ic.start)}`, ic);
                 });
 
-                // 3. 엑셀 데이터 덮어쓰기 및 보완 (결제/상태는 엑셀이 가장 정확함)
+                // 3. 엑셀 데이터로 덮어쓰며 병합 (ICS 연락처 우선 적용)
                 exList.forEach(ex => {
                   const key = `${ex.room}_${formatDate(ex.start)}`;
-                  const existing = dataMap.get(key);
+                  const existing = dataMap.get(key); // existing은 방금 넣은 ICS 캘린더 데이터입니다.
                   if (existing) {
-                    // 병합: 엑셀 기준으로 하되, 엑셀에 없는 연락처나 메모는 캘린더 정보 유지
                     dataMap.set(key, {
-                      ...ex,
-                      contact: ex.contact || existing.contact,
-                      memo: (ex.memo ? ex.memo + (existing.memo ? ' | ' : '') : '') + (existing.memo && !existing.memo.includes(ex.memo) ? existing.memo : ''),
+                      ...ex, // 상태, 객실, 결제여부 등 기본 뼈대는 엑셀 사용
+                      contact: existing.contact ? existing.contact : ex.contact, // ★ 캘린더에 연락처가 있으면 무조건 우선 적용!
+                      memo: (existing.memo ? existing.memo + " | " : "") + ex.memo,
                       source: '통합(완료)'
                     });
                   } else {
@@ -220,8 +241,10 @@
                 });
 
                 const finalArray = Array.from(dataMap.values()).map(d => ({...d, id: d.id || `id_${Date.now()}_${Math.random()}`}));
-                setAllData(finalArray);
-                alert("데이터가 완벽하게 업데이트 및 통합되었습니다!");
+                
+                // 클라우드에 최종 저장
+                saveToCloud(finalArray);
+                alert("데이터가 클라우드에 업데이트되었습니다. 이제 모든 기기에서 공유됩니다!");
                 setIsSyncing(false);
               } catch(err) {
                 alert("캘린더 데이터 분석 중 오류 발생"); setIsSyncing(false);
@@ -235,7 +258,6 @@
         readerX.readAsBinaryString(excelFile);
       };
 
-      // 수기 입력 처리
       const handleManualSubmit = () => {
         if(!form.name || !form.start || !form.end) return alert("필수 정보를 입력해주세요.");
         const sDate = new Date(form.start);
@@ -246,19 +268,16 @@
           status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo
         };
         
-        // 동일 날짜/객실 있으면 덮어쓰기 로직
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
         
-        setAllData([...filtered, newData]);
-        alert("수기 예약이 업데이트 되었습니다!");
+        saveToCloud([...filtered, newData]);
+        alert("수기 예약이 클라우드에 즉시 연동되었습니다!");
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '' });
       };
 
-      // 정렬된 유효 데이터
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
 
-      // ---------------- 달력 렌더링 로직 ----------------
       const getDaysInMonth = (date) => {
         const year = date.getFullYear();
         const month = date.getMonth();
@@ -266,17 +285,10 @@
         const lastDay = new Date(year, month + 1, 0);
         
         const days = [];
-        // 앞달 빈칸 채우기
-        for (let i = 0; i < firstDay.getDay(); i++) {
-          days.push(null);
-        }
-        // 이번달 날짜 채우기
-        for (let i = 1; i <= lastDay.getDate(); i++) {
-          days.push(new Date(year, month, i));
-        }
+        for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+        for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
         return days;
       };
-
       const daysInMonth = getDaysInMonth(currentMonth);
 
       const changeMonth = (offset) => {
@@ -297,7 +309,7 @@
           </nav>
 
           <header>
-            <h2 style={{margin: '0 0 15px 0'}}>🌙 스테이 달이실 대시보드</h2>
+            <h2 style={{margin: '0 0 15px 0'}}>🌙 스테이 달이실 대시보드 (클라우드 연동)</h2>
             <div className="upload-section">
               <div className="upload-box">
                 <label style={{fontSize:'12px', color:'#ccc'}}>1. 엑셀 파일 (.xlsx)</label>
@@ -308,15 +320,15 @@
                 <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} style={{color:'white', border:'1px solid #555'}} />
               </div>
               <button className="btn" onClick={handleSync} style={{maxWidth: '200px'}}>
-                {isSyncing ? '처리 중...' : '데이터 병합 업데이트'}
+                {isSyncing ? '처리 중...' : '클라우드에 연동하기'}
               </button>
             </div>
-            <p style={{fontSize:'12px', color:'#aaa', marginTop:'10px', marginBottom:0}}>* 업로드 시 기존 데이터와 자동으로 비교 및 보완됩니다.</p>
+            <p style={{fontSize:'12px', color:'#aaa', marginTop:'10px', marginBottom:0}}>
+              * 파일을 올려 연동하면 PC와 아이폰에 동시 업데이트되며 캘린더의 연락처가 최우선 적용됩니다.
+            </p>
           </header>
 
           <div className="content">
-            
-            {/* 3. 운영 관리 (월별 캘린더) */}
             {activeTab === '운영관리' && (
               <div>
                 <h3 style={{marginTop:0}}>📅 운영 관리 (월별 캘린더)</h3>
@@ -335,13 +347,12 @@
                   {daysInMonth.map((date, i) => {
                     if (!date) return <div key={`empty-${i}`} className="cal-cell" style={{background:'#f9f9f9'}}></div>;
                     
-                    // 해당 날짜에 겹치는 확정된 예약들 찾기
                     const dayEvents = validData.filter(d => {
                       if (d.status === '취소') return false;
                       const dTime = date.getTime();
                       const sTime = d.start.getTime();
                       const eTime = d.end.getTime();
-                      return dTime >= sTime && dTime < eTime; // 체크아웃 당일은 제외
+                      return dTime >= sTime && dTime < eTime; 
                     });
 
                     return (
@@ -365,7 +376,6 @@
               </div>
             )}
 
-            {/* 1. 예약 자료 */}
             {activeTab === '예약자료' && (
               <div>
                 <h3 style={{marginTop:0}}>통합 마스터 데이터 ({validData.length}건)</h3>
@@ -386,7 +396,6 @@
               </div>
             )}
 
-            {/* 5. 직접 입력 */}
             {activeTab === '직접입력' && (
               <div>
                 <h3 style={{marginTop:0}}>✏️ 수기 예약 직접 입력</h3>
@@ -409,16 +418,13 @@
               </div>
             )}
 
-            {/* 임시 처리된 다른 탭들 (확인필요, 통계 등은 글자 수 제한으로 요약) */}
             {(activeTab === '확인필요' || activeTab === '이용통계') && (
               <div className="card" style={{textAlign:'center', padding:'40px 0', color:'#666'}}>
-                현재 <strong>{activeTab}</strong> 화면입니다. (데이터 통합 및 캘린더 기능이 메인으로 활성화되어 있습니다.)
+                현재 <strong>{activeTab}</strong> 화면입니다. 
               </div>
             )}
-
           </div>
 
-          {/* 달력 이벤트 클릭 시 뜨는 상세 팝업(모달) */}
           {selectedEvent && (
             <div className="modal-overlay" onClick={() => setSelectedEvent(null)}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -435,7 +441,6 @@
               </div>
             </div>
           )}
-
         </div>
       );
     }
