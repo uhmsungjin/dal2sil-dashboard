@@ -38,25 +38,22 @@
     
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; }
     
-    /* 💡 수정됨: 스마트 캘린더 (연속 막대 완벽 지원 구조) */
-    .cal-grid-wrapper { display: flex; flex-direction: column; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
-    .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; }
-    .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; position: relative; border-top: 1px solid #eee; background: #eee;}
-    .cal-cell { background: #fff; padding: 6px; display: flex; flex-direction: column; }
-    .cal-date { font-size: 11px; color: #888; font-weight: bold; }
-    
-    /* 연속 막대 (Event Bar) 스타일 */
-    .event-bar { position: absolute; height: 20px; border-radius: 4px; font-size: 11px; padding: 0 6px; line-height: 20px; color: #333; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 10; font-weight: bold; border-left: 4px solid rgba(0,0,0,0.2); box-sizing: border-box;}
-    .event-front { background: #ffe3e3; }
-    .event-back { background: #d4e6f1; }
-    .event-hill { background: #d5f5e3; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden;}
+    .cal-header { background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; }
+    .cal-cell { background: #fff; min-height: 90px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+    .cal-date { font-size: 11px; color: #888; margin-bottom: 4px; font-weight: bold; }
+    .cal-event { font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; line-height: 1.3; word-break: break-all; font-weight: 600;}
+
+    /* 💡 수정됨: PC와 모바일 캘린더 텍스트 노출 분리 */
+    .event-text-pc { display: none; }
+    .event-text-mobile { display: inline; }
 
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
     .stat-box { background: white; padding: 15px; border-radius: 12px; border: 1px solid #eee; text-align: center; display:flex; flex-direction:column; justify-content:center;}
     .stat-num { font-size: 22px; font-weight: 800; color: #2c3e50; margin-top: 5px; }
 
-    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;}
-    .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 350px; }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box; overflow-y: auto;}
+    .modal-content { background: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 350px; margin: auto; }
 
     .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; }
     .filter-bar input { margin: 0; flex: 2; }
@@ -72,6 +69,11 @@
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
+      .cal-cell { min-height: 105px; } 
+      .cal-event { font-size: 11px; padding: 6px; }
+      /* PC일 경우 PC 텍스트(전체제목) 노출 */
+      .event-text-pc { display: inline; }
+      .event-text-mobile { display: none; }
     }
     @media (max-width: 767px) {
       nav { position: fixed; bottom: 0; width: 100%; border-top: 1px solid #ddd; }
@@ -113,6 +115,10 @@
       const [allData, setAllData] = React.useState([]);
       const [currentMonth, setCurrentMonth] = React.useState(new Date());
       const [selectedEvent, setSelectedEvent] = React.useState(null);
+      
+      // 💡 수정됨: 모달 수정 모드 상태 추가
+      const [isEditing, setIsEditing] = React.useState(false);
+      const [editForm, setEditForm] = React.useState({});
       
       const [searchTerm, setSearchTerm] = React.useState('');
       const [filterRoom, setFilterRoom] = React.useState('전체');
@@ -334,13 +340,52 @@
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
       };
 
+      // 💡 모달창 수정 완료 시 실행되는 함수
+      const handleEditSubmit = () => {
+        if(!editForm.name || !editForm.startStr || !editForm.endStr) return alert("필수 정보를 입력해주세요.");
+        
+        const sDate = new Date(editForm.startStr);
+        const eDate = new Date(editForm.endStr);
+        const n = Math.max(1, Math.round((eDate - sDate)/(1000*60*60*24)));
+        const rev = parseInt(String(editForm.revenue).replace(/,/g, '')) || 0;
+
+        const updatedEvent = {
+          ...selectedEvent,
+          room: editForm.room,
+          name: editForm.name,
+          start: sDate,
+          end: eDate,
+          nights: n,
+          guests: parseInt(editForm.guests) || 2,
+          contact: editForm.contact,
+          revenue: rev,
+          memo: editForm.memo,
+          fullTitle: `[${editForm.room}] ${editForm.name}/ ${n}박` // 수동 수정 시 제목도 맞춤 교정
+        };
+
+        const newData = allData.map(d => d.id === updatedEvent.id ? updatedEvent : d);
+        setAllData(newData);
+        saveToCloud(newData);
+        setSelectedEvent(updatedEvent);
+        setIsEditing(false);
+        alert("일정이 성공적으로 수정되었습니다.");
+      };
+
+      // 💡 모달 오픈 함수 (수정 폼 세팅)
+      const openModal = (ev) => {
+        setSelectedEvent(ev);
+        setEditForm({
+          ...ev,
+          startStr: formatDate(ev.start),
+          endStr: formatDate(ev.end),
+          revenue: ev.revenue || 0
+        });
+        setIsEditing(false);
+      };
+
       const getBadgeClass = (r, s) => {
         if(s === '취소') return 'bg-gray';
         return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
-      };
-      
-      const getEventBarClass = (r) => {
-        return r === '앞집' ? 'event-front' : (r === '뒷집' ? 'event-back' : 'event-hill');
       };
 
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
@@ -436,7 +481,6 @@
       };
       const conflicts = getConflicts();
 
-      // 💡 달력 주차별 분할 로직 (스마트 트랙 계산용)
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -447,17 +491,6 @@
       };
       const daysInMonth = getDaysInMonth(currentMonth);
       const changeMonth = (offset) => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1));
-      
-      const weeks = [];
-      let currentWeek = [];
-      daysInMonth.forEach((day, index) => {
-        currentWeek.push(day);
-        if (currentWeek.length === 7 || index === daysInMonth.length - 1) {
-          while (currentWeek.length < 7) currentWeek.push(null); // 빈 칸 채우기
-          weeks.push(currentWeek);
-          currentWeek = [];
-        }
-      });
 
       return (
         <div className="app-container">
@@ -482,89 +515,31 @@
                   <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(1)}>▶</button>
                 </div>
                 
-                <div className="cal-grid-wrapper">
-                  <div className="cal-header-row">
-                    <div style={{color:'#e74c3c'}}>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style={{color:'#3498db'}}>토</div>
-                  </div>
-                  
-                  {weeks.map((week, wIndex) => {
-                    const weekStart = week.find(d => d !== null);
-                    const weekEnd = [...week].reverse().find(d => d !== null);
-                    if(!weekStart) return null;
+                <div className="cal-grid">
+                  {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+                    <div key={day} className="cal-header" style={{color: day==='일' ? '#e74c3c' : (day==='토' ? '#3498db' : '#555')}}>{day}</div>
+                  ))}
+                  {daysInMonth.map((date, i) => {
+                    if (!date) return <div key={`empty-${i}`} className="cal-cell" style={{background:'#f9f9f9'}}></div>;
                     
-                    // 1. 해당 주간(Week)에 걸치는 예약 필터링
-                    let weekEvents = activeData.filter(d => {
-                      const checkOutEve = new Date(d.end);
-                      checkOutEve.setDate(checkOutEve.getDate() - 1); // 체크아웃 당일은 막대에서 제외
-                      return d.start.getTime() <= weekEnd.getTime() && checkOutEve.getTime() >= weekStart.getTime();
+                    const dayEvents = activeData.filter(d => {
+                      const dTime = date.getTime();
+                      // 💡 수정됨: 퇴실하는 날짜(end.getTime())까지 포함하여(<=) 달력에 박스 표시 
+                      return dTime >= d.start.getTime() && dTime <= d.end.getTime(); 
                     });
                     
-                    weekEvents.sort((a,b) => a.start.getTime() - b.start.getTime());
-
-                    // 2. 스마트 트랙 알고리즘: 막대가 겹치지 않도록 세로줄(Track)을 자동 할당
-                    const tracks = [];
-                    const renderedEvents = weekEvents.map(ev => {
-                      const checkOutEve = new Date(ev.end);
-                      checkOutEve.setDate(checkOutEve.getDate() - 1);
-                      
-                      let startDayIndex = 0;
-                      if (ev.start >= weekStart) startDayIndex = ev.start.getDay();
-                      
-                      let endDayIndex = 6;
-                      if (checkOutEve <= weekEnd) endDayIndex = checkOutEve.getDay();
-                      
-                      const span = endDayIndex - startDayIndex + 1;
-                      
-                      let trackIdx = 0;
-                      while(true) {
-                        if(!tracks[trackIdx]) tracks[trackIdx] = [false,false,false,false,false,false,false];
-                        let collision = false;
-                        for(let i=startDayIndex; i<=endDayIndex; i++) {
-                          if(tracks[trackIdx][i]) { collision = true; break; }
-                        }
-                        if(!collision) {
-                          for(let i=startDayIndex; i<=endDayIndex; i++) {
-                            tracks[trackIdx][i] = true;
-                          }
-                          break;
-                        }
-                        trackIdx++;
-                      }
-                      
-                      return { ...ev, startDayIndex, span, trackIdx };
-                    });
-
-                    // 해당 주의 캘린더 세로 높이를 막대 개수에 맞춰 유동적으로 조절
-                    const rowMinHeight = Math.max(90, 35 + (tracks.length * 24));
-
                     return (
-                      <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
-                        
-                        {/* 달력 배경 셀 그리기 */}
-                        {week.map((date, dIndex) => (
-                          <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
-                            {date && <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>{date.getDate()}</div>}
+                      <div key={i} className="cal-cell">
+                        <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>
+                          {date.getDate()}
+                        </div>
+                        {dayEvents.map((ev, idx) => (
+                          <div key={idx} className={`cal-event ${getBadgeClass(ev.room, ev.status)}`} onClick={() => openModal(ev)}>
+                            {/* 💡 수정됨: PC에서는 전체 제목, 모바일에서는 이름만 노출 */}
+                            <span className="event-text-pc">{ev.fullTitle || ev.name}</span>
+                            <span className="event-text-mobile">{ev.name}</span>
                           </div>
                         ))}
-                        
-                        {/* 예약 가로 막대 그리기 */}
-                        {renderedEvents.map(ev => {
-                          const topPos = 28 + (ev.trackIdx * 24); // 날짜 숫자 아래부터 차곡차곡 쌓임
-                          return (
-                            <div 
-                              key={ev.id} 
-                              className={`event-bar ${getEventBarClass(ev.room)}`}
-                              style={{
-                                left: `calc((100% / 7) * ${ev.startDayIndex} + 2px)`,
-                                width: `calc((100% / 7) * ${ev.span} - 4px)`,
-                                top: `${topPos}px`
-                              }}
-                              onClick={() => setSelectedEvent(ev)}
-                            >
-                              {ev.fullTitle || ev.name}
-                            </div>
-                          );
-                        })}
                       </div>
                     );
                   })}
@@ -725,22 +700,56 @@
           </div>
 
           {selectedEvent && (
-            <div className="modal-overlay" onClick={() => setSelectedEvent(null)}>
+            <div className="modal-overlay" onClick={() => { setSelectedEvent(null); setIsEditing(false); }}>
               <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <h3 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50', display:'flex', alignItems:'center', gap:'8px'}}>
-                  <span className={`badge ${getBadgeClass(selectedEvent.room, selectedEvent.status)}`} style={{margin:0}}>{selectedEvent.room}</span> 
-                  {selectedEvent.name}
-                </h3>
-                <div style={{fontSize:'14px', color:'#444', lineHeight:'1.8'}}>
-                  <div><strong>📅 일정:</strong> {formatDate(selectedEvent.start)} ~ {formatDate(selectedEvent.end)} ({selectedEvent.nights}박)</div>
-                  <div><strong>👥 인원:</strong> {selectedEvent.guests}명</div>
-                  {selectedEvent.revenue > 0 && <div style={{color:'#d35400', fontWeight:'bold'}}><strong>💰 결제:</strong> {formatMoney(selectedEvent.revenue)}</div>}
-                </div>
-                <div style={{background:'#f8f9fa', padding:'15px', borderRadius:'8px', marginTop:'20px', border:'1px solid #eee', lineHeight:'1.8'}}>
-                  <div style={{fontSize:'15px', color:'#d35400', fontWeight:'bold'}}>📞 {selectedEvent.contact || '연락처 미기재'}</div>
-                  <div style={{fontSize:'13px', color:'#34495e', marginTop:'5px'}}>📝 {selectedEvent.memo || '요청사항/메모 없음'}</div>
-                </div>
-                <button className="btn" style={{marginTop:'20px', background:'#e9ecef', color:'#495057', padding:'10px'}} onClick={() => setSelectedEvent(null)}>닫기</button>
+                
+                {/* 💡 팝업 상세 모드 */}
+                {!isEditing ? (
+                  <div>
+                    <h3 style={{marginTop:0, marginBottom:'15px', color:'#2c3e50', display:'flex', alignItems:'center', gap:'8px'}}>
+                      <span className={`badge ${getBadgeClass(selectedEvent.room, selectedEvent.status)}`} style={{margin:0}}>{selectedEvent.room}</span> 
+                      {selectedEvent.name}
+                    </h3>
+                    <div style={{fontSize:'14px', color:'#444', lineHeight:'1.8'}}>
+                      <div><strong>📅 일정:</strong> {formatDate(selectedEvent.start)} ~ {formatDate(selectedEvent.end)} ({selectedEvent.nights}박)</div>
+                      <div><strong>👥 인원:</strong> {selectedEvent.guests}명</div>
+                      {selectedEvent.revenue > 0 && <div style={{color:'#d35400', fontWeight:'bold'}}><strong>💰 결제:</strong> {formatMoney(selectedEvent.revenue)}</div>}
+                    </div>
+                    <div style={{background:'#f8f9fa', padding:'15px', borderRadius:'8px', marginTop:'20px', border:'1px solid #eee', lineHeight:'1.8'}}>
+                      <div style={{fontSize:'15px', color:'#d35400', fontWeight:'bold'}}>📞 {selectedEvent.contact || '연락처 미기재'}</div>
+                      <div style={{fontSize:'13px', color:'#34495e', marginTop:'5px'}}>📝 {selectedEvent.memo || '요청사항/메모 없음'}</div>
+                    </div>
+                    <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
+                      <button className="btn" style={{background:'#FFBB00', color:'#2c3e50'}} onClick={() => setIsEditing(true)}>일정 수정하기</button>
+                      <button className="btn" style={{background:'#e9ecef', color:'#495057'}} onClick={() => setSelectedEvent(null)}>닫기</button>
+                    </div>
+                  </div>
+                ) : (
+                  
+                  /* 💡 팝업 수정(Edit) 모드 */
+                  <div>
+                    <h3 style={{marginTop:0, marginBottom:'15px'}}>✏️ 예약 직접 수정</h3>
+                    <select value={editForm.room} onChange={e => setEditForm({...editForm, room: e.target.value})}>
+                      <option value="앞집">앞집</option><option value="뒷집">뒷집</option><option value="언덕집">언덕집</option>
+                    </select>
+                    <input type="text" placeholder="이름" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                    <div style={{display:'flex', gap:'5px'}}>
+                      <input type="date" value={editForm.startStr} onChange={e => setEditForm({...editForm, startStr: e.target.value})} />
+                      <input type="date" value={editForm.endStr} onChange={e => setEditForm({...editForm, endStr: e.target.value})} />
+                    </div>
+                    <div style={{display:'flex', gap:'5px'}}>
+                      <input type="number" placeholder="인원" value={editForm.guests} onChange={e => setEditForm({...editForm, guests: e.target.value})} />
+                      <input type="text" placeholder="연락처" value={editForm.contact} onChange={e => setEditForm({...editForm, contact: e.target.value})} />
+                    </div>
+                    <input type="number" placeholder="매출액" value={editForm.revenue} onChange={e => setEditForm({...editForm, revenue: e.target.value})} />
+                    <textarea rows="2" placeholder="메모" value={editForm.memo} onChange={e => setEditForm({...editForm, memo: e.target.value})}></textarea>
+                    
+                    <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+                      <button className="btn" style={{background:'#27ae60', color:'#fff'}} onClick={handleEditSubmit}>저장</button>
+                      <button className="btn" style={{background:'#e9ecef', color:'#495057'}} onClick={() => setIsEditing(false)}>취소</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
