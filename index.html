@@ -17,11 +17,12 @@
     body { margin: 0; background-color: #f8f9fa; font-family: -apple-system, sans-serif; color: #333; }
     .app-container { display: flex; flex-direction: column; min-height: 100vh; }
     
-    header { background: #2c3e50; color: white; padding: 8px 15px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; border-bottom: 3px solid #FFBB00;}
-    .header-logo { max-height: 26px; }
-    .header-title { font-size: 12px; color: #bdc3c7; letter-spacing: 1px; margin: 0; font-weight: normal;}
+    /* 💡 수정됨: PC와 모바일 모두 상단 영역 최소화 (가로 1줄 배치) */
+    header { background: #2c3e50; color: white; padding: 10px 15px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; border-bottom: 3px solid #FFBB00;}
+    .header-logo { max-height: 28px; }
+    .header-title { font-size: 13px; color: #bdc3c7; letter-spacing: 1px; margin: 0; font-weight: normal;}
     
-    .content { flex: 1; padding: 10px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
+    .content { flex: 1; padding: 12px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
     
     .card { background: #fff; border: 1px solid #e1e8ed; padding: 15px; margin-bottom: 12px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
     .card.canceled { background-color: #d6d8db; color: #495057; border-color: #c6c8ca; }
@@ -38,10 +39,10 @@
     
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; }
     
-    /* 💡 수정됨: 캘린더 그리드 스타일을 가로 막대 이전의 안정적인 박스(cell) 형태로 복구 */
+    /* 💡 수정됨: 안정적인 오리지널 박스형 캘린더 디자인 복구 */
     .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden;}
     .cal-header { background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; }
-    .cal-cell { background: #fff; min-height: 85px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+    .cal-cell { background: #fff; min-height: 90px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
     .cal-date { font-size: 11px; color: #888; margin-bottom: 4px; font-weight: bold; }
     .cal-event { font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; line-height: 1.3; word-break: break-all; font-weight: 600;}
 
@@ -66,7 +67,8 @@
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
-      .cal-cell { min-height: 100px; } 
+      /* 💡 PC 달력 최적화: 높이를 적당히 잡아 한눈에 들어오게 설정 */
+      .cal-cell { min-height: 105px; } 
       .cal-event { font-size: 11px; padding: 6px; }
     }
     @media (max-width: 767px) {
@@ -76,7 +78,12 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div style="text-align:center; padding:80px 20px; color:#666;">
+      <h3>화면을 불러오고 있습니다...</h3>
+      <p>계속해서 이 화면이 보인다면 <strong>Ctrl + Shift + R</strong> 을 눌러 강력 새로고침을 해주세요.</p>
+    </div>
+  </div>
   
   <script type="text/babel">
     const firebaseConfig = {
@@ -122,6 +129,8 @@
               end: d.end ? new Date(d.end) : null
             }));
             setAllData(parsedData);
+          } else {
+            setAllData([]);
           }
         });
         return () => ref.off();
@@ -163,6 +172,7 @@
       };
 
       const extractName = (summary) => {
+        if (!summary) return '미상';
         const matchBracket = summary.match(/\[.*?\]\s*([^/]+)/);
         if (matchBracket) return matchBracket[1].split(',')[0].trim();
         const parts = summary.split('/');
@@ -197,14 +207,13 @@
               const price = parseInt(String(row['결제금액'] || '0').replace(/,/g, '')) || 0;
               const refund = parseInt(String(row['환불금액'] || '0').replace(/,/g, '')) || 0;
               const revenue = price - refund;
+              const extractedName = row['예약자'] || '미상';
 
               exList.push({
                 room: rawRoom.includes('앞집') ? '앞집' : (rawRoom.includes('뒷집') ? '뒷집' : '언덕집'),
-                name: row['예약자'] || '미상',
-                
-                // 💡 수정됨: 캘린더에 전체 원본 타이틀을 저장하기 위한 속성(fullTitle) 추가
-                fullTitle: `[${rawRoom.includes('앞집')?'앞집':(rawRoom.includes('뒷집')?'뒷집':'언덕집')}] ${row['예약자']||'미상'}/ ${dates.nights}박`,
-                
+                name: extractedName,
+                // 💡 엑셀 데이터용 fullTitle 생성
+                fullTitle: `[${rawRoom.includes('앞집')?'앞집':(rawRoom.includes('뒷집')?'뒷집':'언덕집')}] ${extractedName}/ ${dates.nights}박`,
                 start: dates.start, end: dates.end, nights: dates.nights,
                 status: String(row['상태'] || '').includes('취소') ? '취소' : '확정',
                 contact: row['전화번호'] || '',
@@ -228,6 +237,7 @@
                   if(!startMatch || !endMatch) return;
 
                   const sDate = new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8));
+                  // 💡 강제 교정 제거 (ICS 원본 날짜 그대로 적용하여 확인필요 탭 활용)
                   const eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
                   const nights = Math.round((eDate - sDate)/(1000*60*60*24));
                   
@@ -280,7 +290,7 @@
                       ...ex, 
                       contact: existing.contact ? existing.contact : ex.contact,
                       memo: finalMemo,
-                      fullTitle: existing.fullTitle, // ICS에서 가져온 상세 타이틀 유지
+                      fullTitle: existing.fullTitle || ex.fullTitle, // 💡 병합 시 ICS 상세 타이틀 유지
                       source: '통합(완료)'
                     });
                   } else {
@@ -320,7 +330,7 @@
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
         saveToCloud([...filtered, newData]);
-        alert("저장되었습니다!");
+        alert("수기 예약이 저장되었습니다!");
         setForm({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
       };
 
@@ -332,8 +342,10 @@
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
       const activeData = validData.filter(d => d.status !== '취소');
       
+      // 💡 에러 원인 해결: 이름에 빈칸이 있어도 다운되지 않도록 String 방어 코드 추가
       const filteredList = validData.filter(d => {
-        const matchName = d.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const safeName = String(d.name || '').toLowerCase();
+        const matchName = safeName.includes(searchTerm.toLowerCase());
         const matchRoom = filterRoom === '전체' || d.room === filterRoom;
         const matchStatus = filterStatus === '전체' || d.status === filterStatus;
         return matchName && matchRoom && matchStatus;
@@ -421,7 +433,6 @@
       };
       const conflicts = getConflicts();
 
-      // 💡 달력 로직을 복구 (막대가 아닌 개별 박스로 표기)
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -456,7 +467,7 @@
                   <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(1)}>▶</button>
                 </div>
                 
-                {/* 💡 수정됨: 안정적인 오리지널 캘린더 그리드 스타일 */}
+                {/* 💡 복구된 오리지널 박스형 캘린더 그리드 */}
                 <div className="cal-grid">
                   {['일', '월', '화', '수', '목', '금', '토'].map(day => (
                     <div key={day} className="cal-header" style={{color: day==='일' ? '#e74c3c' : (day==='토' ? '#3498db' : '#555')}}>{day}</div>
@@ -465,7 +476,6 @@
                     if (!date) return <div key={`empty-${i}`} className="cal-cell" style={{background:'#f9f9f9'}}></div>;
                     const dayEvents = activeData.filter(d => {
                       const dTime = date.getTime();
-                      // 체크아웃 당일은 달력에 표시하지 않음
                       return dTime >= d.start.getTime() && dTime < d.end.getTime(); 
                     });
                     return (
@@ -475,7 +485,7 @@
                         </div>
                         {dayEvents.map((ev, idx) => (
                           <div key={idx} className={`cal-event ${getBadgeClass(ev.room, ev.status)}`} onClick={() => setSelectedEvent(ev)}>
-                            {/* 💡 수정됨: 이름뿐만 아니라 전체 원본 제목 텍스트 표시 */}
+                            {/* 💡 이름뿐만 아니라 전체 원본 제목 그대로 노출 */}
                             {ev.fullTitle || ev.name}
                           </div>
                         ))}
@@ -490,6 +500,7 @@
               <div>
                 <h3 style={{marginTop:0}}>총 누적 예약 리스트 ({filteredList.length}건)</h3>
                 
+                {/* 💡 복구된 검색 및 필터 UI */}
                 <div className="filter-bar">
                   <input type="text" placeholder="이름 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <select value={filterRoom} onChange={e => setFilterRoom(e.target.value)}>
@@ -529,7 +540,7 @@
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 예약 불일치 내역</h3>
-                <p style={{fontSize:'13px', color:'#666'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 점검이 필요합니다.</p>
+                <p style={{fontSize:'13px', color:'#666'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 교정이 필요합니다.</p>
                 {conflicts.length > 0 ? conflicts.map((c, i) => (
                   <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c', paddingLeft:'15px'}}>
                     <strong>[{c.type}]</strong> <span style={{color:'#555', fontSize:'14px'}}>{c.date}</span>
