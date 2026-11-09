@@ -38,15 +38,22 @@
     
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; }
     
-    /* 💡 수정됨: CSS Grid를 활용한 완벽한 캘린더 연속 막대 스타일링 */
-    .cal-grid { display: flex; flex-direction: column; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden; gap: 1px;}
-    .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; }
+    /* 💡 복구 및 최적화 완료된 캘린더 그리드 스타일 */
+    .cal-wrapper { display: flex; flex-direction: column; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;}
+    .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); background: #f8f9fa; text-align: center; font-size: 12px; padding: 10px 0; font-weight: bold; color: #555; border-bottom: 1px solid #ddd;}
+    .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); position: relative; border-bottom: 1px solid #eee; background: #fff; }
+    .cal-row:last-child { border-bottom: none; }
+    .cal-cell { min-height: 90px; padding: 5px; border-right: 1px solid #f0f0f0; box-sizing: border-box;}
+    .cal-cell:last-child { border-right: none; }
+    .cal-date { font-size: 12px; font-weight: bold; color: #777; margin-bottom: 5px; text-align: left; }
     
-    .event-bar { height: 20px; border-radius: 4px; font-size: 11px; padding: 0 4px; line-height: 20px; color: #333; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; border-left: 3px solid rgba(0,0,0,0.2); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    .event-front { background: #ffe3e3; }
-    .event-back { background: #d4e6f1; }
-    .event-hill { background: #d5f5e3; }
+    /* 연속 일정 막대 스타일 */
+    .event-bar { position: absolute; height: 22px; line-height: 22px; border-radius: 4px; font-size: 11px; padding: 0 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border-left: 3px solid rgba(0,0,0,0.2); box-sizing: border-box; z-index: 10;}
+    .event-front { background: #ffe3e3; color: #c0392b;}
+    .event-back { background: #d4e6f1; color: #2980b9;}
+    .event-hill { background: #d5f5e3; color: #27ae60;}
 
+    /* 💡 텍스트 반응형 (PC는 원본 제목 그대로, 모바일은 이름만) */
     .event-text-pc { display: none; }
     .event-text-mobile { display: inline; }
 
@@ -71,7 +78,9 @@
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
-      /* PC일 경우 PC 텍스트(전체제목) 노출 */
+      /* PC 달력 최적화 */
+      .cal-cell { min-height: 110px; } 
+      .event-bar { height: 24px; line-height: 24px; font-size: 12px; }
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
     }
@@ -161,7 +170,6 @@
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       };
 
-      // 💡 시차(Timezone) 문제를 방지하는 완벽한 로컬 날짜 생성기
       const parseLocal = (str) => {
         if (!str) return null;
         const [y, m, d] = str.split('-');
@@ -349,7 +357,6 @@
       const handleEditSubmit = () => {
         if(!editForm.name || !editForm.startStr || !editForm.endStr) return alert("필수 정보를 입력해주세요.");
         
-        // 💡 수정됨: parseLocal 함수를 사용해 수정할 때도 시간 오류 방지
         const sDate = parseLocal(editForm.startStr);
         const eDate = parseLocal(editForm.endStr);
         const n = Math.max(1, Math.round((eDate - sDate)/(1000*60*60*24)));
@@ -490,7 +497,7 @@
       };
       const conflicts = getConflicts();
 
-      // 💡 달력을 1주일씩 쪼개고 빈칸을 정확히 메우는 로직
+      // 💡 달력을 1주일 단위로 완벽하게 나누는 로직 (스마트 캘린더용)
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -507,7 +514,7 @@
       daysInMonth.forEach((day, index) => {
         currentWeek.push(day);
         if (currentWeek.length === 7 || index === daysInMonth.length - 1) {
-          while (currentWeek.length < 7) currentWeek.push(null); // 남은 칸 빈값(null) 채우기
+          while (currentWeek.length < 7) currentWeek.push(null);
           weeks.push(currentWeek);
           currentWeek = [];
         }
@@ -536,33 +543,42 @@
                   <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(1)}>▶</button>
                 </div>
                 
-                <div className="cal-grid-wrapper">
+                <div className="cal-wrapper">
                   <div className="cal-header-row">
                     <div style={{color:'#e74c3c'}}>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style={{color:'#3498db'}}>토</div>
                   </div>
                   
                   {weeks.map((week, wIndex) => {
-                    const weekStart = week.find(d => d !== null);
-                    const weekEnd = [...week].reverse().find(d => d !== null);
-                    if(!weekStart) return null;
+                    const ws = new Date(week.find(d => d !== null));
+                    ws.setHours(0,0,0,0);
+                    const we = new Date([...week].reverse().find(d => d !== null));
+                    we.setHours(23,59,59,999); // 해당 주의 토요일 자정 직전까지 설정
                     
-                    // 1. 해당 주간에 겹치는 일정들 찾기
+                    if(!ws) return null;
+                    
                     let weekEvents = activeData.filter(d => {
-                      // 💡 수정됨: 퇴실일(end.getTime()) 당일까지 캘린더에 색칠되도록 변경
-                      return d.start.getTime() <= weekEnd.getTime() && d.end.getTime() >= weekStart.getTime();
+                      const checkOutEve = new Date(d.end);
+                      checkOutEve.setDate(checkOutEve.getDate() - 1); 
+                      // 이번 주 안에 시작일이나 퇴실 전날이 걸쳐 있으면 포함
+                      return d.start.getTime() <= we.getTime() && checkOutEve.getTime() >= ws.getTime();
                     });
                     
-                    weekEvents.sort((a,b) => a.start.getTime() - b.start.getTime());
+                    weekEvents.sort((a,b) => {
+                      if (a.start.getTime() !== b.start.getTime()) return a.start.getTime() - b.start.getTime();
+                      return b.nights - a.nights; // 긴 일정부터 배치
+                    });
 
-                    // 2. 일정이 겹치지 않게 가로 막대를 쌓아 올리는(Track) 알고리즘
+                    // 스마트 트랙 겹침 방지 알고리즘
                     const tracks = [];
                     const renderedEvents = weekEvents.map(ev => {
+                      const checkOutEve = new Date(ev.end);
+                      checkOutEve.setDate(checkOutEve.getDate() - 1);
                       
                       let startDayIndex = 0;
-                      if (ev.start >= weekStart) startDayIndex = ev.start.getDay();
+                      if (ev.start >= ws) startDayIndex = ev.start.getDay();
                       
                       let endDayIndex = 6;
-                      if (ev.end <= weekEnd) endDayIndex = ev.end.getDay(); // 퇴실일 포함
+                      if (checkOutEve <= we) endDayIndex = checkOutEve.getDay();
                       
                       const span = endDayIndex - startDayIndex + 1;
                       
@@ -585,29 +601,26 @@
                       return { ...ev, startDayIndex, span, trackIdx };
                     });
 
-                    // 해당 주간의 캘린더 세로 길이를 겹치는 막대 갯수에 비례해 유동적으로 늘림
-                    const rowMinHeight = Math.max(90, 30 + (tracks.length * 24));
+                    // 막대 개수에 따라 세로 높이 가변 조정
+                    const rowMinHeight = Math.max(90, 30 + (tracks.length * 26));
 
                     return (
                       <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
-                        
-                        {/* 달력 배경 (흰색 네모 칸들) */}
                         {week.map((date, dIndex) => (
-                          <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9', borderRight: dIndex<6 ? '1px solid #eee' : 'none'}}>
+                          <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
                             {date && <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>{date.getDate()}</div>}
                           </div>
                         ))}
                         
-                        {/* 달력 예약 띠(가로 막대) 그리기 */}
                         {renderedEvents.map(ev => {
-                          const topPos = 26 + (ev.trackIdx * 24);
+                          const topPos = 25 + (ev.trackIdx * 26);
                           return (
                             <div 
                               key={ev.id} 
                               className={`event-bar ${getEventBarClass(ev.room)}`}
                               style={{
-                                left: `calc((100% / 7) * ${ev.startDayIndex} + 2px)`,
-                                width: `calc((100% / 7) * ${ev.span} - 4px)`,
+                                left: `calc((100% / 7) * ${ev.startDayIndex} + 4px)`,
+                                width: `calc((100% / 7) * ${ev.span} - 8px)`,
                                 top: `${topPos}px`
                               }}
                               onClick={() => openModal(ev)}
@@ -667,7 +680,7 @@
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 예약 불일치 내역</h3>
-                <p style={{fontSize:'13px', color:'#666'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 점검이 필요합니다.</p>
+                <p style={{fontSize:'13px', color:'#666'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 교정이 필요합니다.</p>
                 {conflicts.length > 0 ? conflicts.map((c, i) => (
                   <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c', paddingLeft:'15px'}}>
                     <strong>[{c.type}]</strong> <span style={{color:'#555', fontSize:'14px'}}>{c.date}</span>
@@ -796,7 +809,6 @@
                       <div style={{fontSize:'13px', color:'#34495e', marginTop:'5px'}}>📝 {selectedEvent.memo || '요청사항/메모 없음'}</div>
                     </div>
                     <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
-                      {/* 💡 수정됨: [일정 수정하기] 버튼 활성화 */}
                       <button className="btn" style={{background:'#FFBB00', color:'#2c3e50'}} onClick={() => setIsEditing(true)}>일정 수정하기</button>
                       <button className="btn" style={{background:'#e9ecef', color:'#495057'}} onClick={() => setSelectedEvent(null)}>닫기</button>
                     </div>
