@@ -107,7 +107,7 @@
   
   <script type="text/babel">
     const firebaseConfig = {
-      apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iয়ালiFZk0OPNhA",
+      apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iFZk0OPNhA",
       authDomain: "dal2sil-db.firebaseapp.com",
       projectId: "dal2sil-db",
       storageBucket: "dal2sil-db.firebasestorage.app",
@@ -140,8 +140,10 @@
       const [filterStatus, setFilterStatus] = React.useState('전체');
       
       const [sortOrder, setSortOrder] = React.useState('desc');
-      
       const [lastUpdated, setLastUpdated] = React.useState(null);
+      
+      // 💡 완료된 항목 보기/숨기기 상태 추가
+      const [showCompletedTodo, setShowCompletedTodo] = React.useState(false);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
 
@@ -154,7 +156,8 @@
               ...d,
               start: d.start ? new Date(d.start) : null,
               end: d.end ? new Date(d.end) : null,
-              todo: d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false }
+              // 💡 confirmed(완료 확인) 속성 초기화
+              todo: d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
             }));
             setAllData(parsedData);
           } else {
@@ -242,13 +245,26 @@
       const toggleTodo = (id, taskKey) => {
         const newData = allData.map(d => {
           if (d.id === id) {
-            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false };
+            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
             let updatedTodo = { ...currentTodo, [taskKey]: !currentTodo[taskKey] };
             
             if (taskKey === 'task3_self' && updatedTodo.task3_self) updatedTodo.task3_agency = false;
             if (taskKey === 'task3_agency' && updatedTodo.task3_agency) updatedTodo.task3_self = false;
 
             return { ...d, todo: updatedTodo };
+          }
+          return d;
+        });
+        setAllData(newData);
+        saveToCloud(newData);
+      };
+
+      // 💡 일정 완료(삭제) 확인 / 취소 토글 함수
+      const confirmTodo = (id, isConfirmed) => {
+        const newData = allData.map(d => {
+          if (d.id === id) {
+            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
+            return { ...d, todo: { ...currentTodo, confirmed: isConfirmed } };
           }
           return d;
         });
@@ -304,18 +320,15 @@
 
                   const sDate = new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8));
                   
-                  // 💡 ics 캘린더 전용 데이터 일정 길이 자동 교정 로직 
                   let eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
                   let nights = Math.round((eDate - sDate)/(1000*60*60*24));
                   
-                  // 제목에 적힌 'X박' 을 찾아 실제 체크아웃 날짜를 역산합니다.
                   const nightMatch = summary.match(/(\d+)박/);
                   if (nightMatch) {
                       nights = parseInt(nightMatch[1], 10);
                       eDate = new Date(sDate);
                       eDate.setDate(eDate.getDate() + nights);
                   } else {
-                      // '박' 표기가 없을 경우 네이버 캘린더 시스템 특성상 하루 길게 출력되는 것을 뺌
                       eDate.setDate(eDate.getDate() - 1);
                       nights = Math.round((eDate - sDate)/(1000*60*60*24));
                       if (nights <= 0) {
@@ -340,7 +353,7 @@
                     room: r,
                     name: extractName(summary),
                     fullTitle: summary,
-                    start: sDate, end: eDate, nights: nights, // 정확하게 교정된 데이터 입력
+                    start: sDate, end: eDate, nights: nights,
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
                     contact: contact,
                     guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2,
@@ -359,7 +372,8 @@
                       task1: oldTodo.task1 || false,
                       task2: oldTodo.task2 || false,
                       task3_self: oldTodo.task3_self || oldTodo.task3 || false,
-                      task3_agency: oldTodo.task3_agency || false
+                      task3_agency: oldTodo.task3_agency || false,
+                      confirmed: oldTodo.confirmed || false
                     };
                   }
                 });
@@ -401,12 +415,11 @@
                   return {
                     ...d, 
                     id: d.id || `id_${Date.now()}_${Math.random()}`,
-                    todo: existingTodos[key] || { task1: false, task2: false, task3_self: false, task3_agency: false }
+                    todo: existingTodos[key] || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
                   }
                 });
                 
                 saveToCloud(finalArray);
-                
                 db.ref('dal2sil_meta/lastUpdated').set(new Date().toISOString());
 
                 alert("연동 완료! 문제가 있는 내역은 [확인필요] 탭을 점검하세요.");
@@ -435,7 +448,7 @@
           start: sDate, end: eDate, nights: n,
           status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo,
           price: p, refund: 0, revenue: p,
-          todo: { task1: false, task2: false, task3_self: false, task3_agency: false }
+          todo: { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
         };
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
@@ -463,7 +476,7 @@
           contact: editForm.contact,
           revenue: rev,
           memo: editForm.memo,
-          todo: selectedEvent.todo || { task1: false, task2: false, task3_self: false, task3_agency: false },
+          todo: selectedEvent.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false },
           fullTitle: `[${editForm.room}] ${editForm.name}/ ${n}박` 
         };
 
@@ -508,12 +521,17 @@
       nextWeek.setDate(todayDate.getDate() + 7);
       nextWeek.setHours(23,59,59,999);
 
-      const todoList = activeData.filter(d => {
+      // 💡 To-Do 상태 분리: active(진행중) vs completed(완료됨)
+      const activeTodoList = activeData.filter(d => {
         const inRange = d.end >= pastWeek && d.start <= nextWeek;
-        const isCompleted = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
-        return inRange && !isCompleted;
+        return inRange && !d.todo?.confirmed;
       });
-      todoList.sort((a,b) => a.start.getTime() - b.start.getTime());
+      activeTodoList.sort((a,b) => a.start.getTime() - b.start.getTime());
+
+      const completedTodoList = activeData.filter(d => {
+        return d.todo?.confirmed;
+      });
+      completedTodoList.sort((a,b) => b.start.getTime() - a.start.getTime()); // 최근 일정 순
       
       let filteredList = validData.filter(d => {
         const safeName = String(d.name || '').toLowerCase();
@@ -644,6 +662,69 @@
         }
       });
 
+      // 💡 공통 To-Do 렌더링 헬퍼 함수
+      const renderTodoCard = (d, isCompletedList) => {
+        const isReadyToConfirm = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
+        
+        return (
+          <div key={d.id} className="card" style={{borderLeft: `5px solid ${d.room==='앞집'?'#e74c3c':(d.room==='뒷집'?'#3498db':'#27ae60')}`, padding:'20px', opacity: isCompletedList ? 0.75 : 1}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px', borderBottom:'1px dashed #eee', paddingBottom:'15px'}}>
+              <div>
+                <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                <strong style={{marginLeft:'8px', fontSize:'16px'}}>{d.name}</strong> 
+              </div>
+              <div style={{fontSize:'13px', fontWeight:'bold', color:'#34495e', textAlign:'right'}}>
+                {formatDate(d.start)} <span style={{color:'#bdc3c7'}}>~</span> {formatDate(d.end)} <br/>
+                <span style={{color:'#e67e22'}}>({d.nights}박)</span>
+              </div>
+            </div>
+            
+            <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+              <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
+                <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
+                  ① 입실 상태 확인
+                </span>
+                <input type="checkbox" checked={d.todo?.task1 || false} onChange={() => toggleTodo(d.id, 'task1')} />
+              </label>
+              
+              <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
+                <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task2 ? 'line-through' : 'none', color: d.todo?.task2 ? '#bdc3c7' : '#2c3e50'}}>
+                  ② 안내 문자 발송
+                </span>
+                <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
+              </label>
+              
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
+                <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: (d.todo?.task3_self || d.todo?.task3_agency) ? 'line-through' : 'none', color: (d.todo?.task3_self || d.todo?.task3_agency) ? '#bdc3c7' : '#2c3e50'}}>
+                  ③ 퇴실 청소 진행
+                </span>
+                <div style={{display:'flex', gap:'15px'}}>
+                  <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                    자체청소 <input type="checkbox" checked={d.todo?.task3_self || false} onChange={() => toggleTodo(d.id, 'task3_self')} />
+                  </label>
+                  <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                    업체청소 <input type="checkbox" checked={d.todo?.task3_agency || false} onChange={() => toggleTodo(d.id, 'task3_agency')} />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* 💡 [완료 확인] 또는 [완료 취소] 버튼 */}
+            {isCompletedList ? (
+              <button className="btn" style={{marginTop:'15px', background:'#e1e8ed', color:'#333'}} onClick={() => confirmTodo(d.id, false)}>
+                ↩️ 완료 취소 (진행 중으로 되돌리기)
+              </button>
+            ) : (
+              isReadyToConfirm && (
+                <button className="btn" style={{marginTop:'15px', background:'#27ae60', color:'#fff'}} onClick={() => confirmTodo(d.id, true)}>
+                  ✅ 완료 확인 (목록에서 삭제)
+                </button>
+              )
+            )}
+          </div>
+        );
+      };
+
       return (
         <div className="app-container">
           <nav>
@@ -767,60 +848,32 @@
               </div>
             )}
             
+            {/* 💡 업그레이드 된 To-Do 탭 (완료 항목 확인 및 복구 가능) */}
             {activeTab === 'To-Do' && (
               <div>
-                <h3 style={{marginTop:0, marginBottom:'20px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
+                <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
+                <p style={{fontSize:'13px', color:'#7f8c8d', marginBottom:'20px', marginTop:0}}>
+                  3가지 업무를 모두 체크한 뒤 <strong>[✅ 완료 확인]</strong> 버튼을 누르면 목록에서 지워집니다.
+                </p>
                 
-                {todoList.length > 0 ? todoList.map((d, idx) => {
-                  const isTask3Done = d.todo?.task3_self || d.todo?.task3_agency;
-                  return (
-                    <div key={d.id} className="card" style={{borderLeft: `5px solid ${d.room==='앞집'?'#e74c3c':(d.room==='뒷집'?'#3498db':'#27ae60')}`, padding:'20px'}}>
-                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px', borderBottom:'1px dashed #eee', paddingBottom:'15px'}}>
-                        <div>
-                          <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
-                          <strong style={{marginLeft:'8px', fontSize:'16px'}}>{d.name}</strong> 
-                        </div>
-                        <div style={{fontSize:'13px', fontWeight:'bold', color:'#34495e', textAlign:'right'}}>
-                          {formatDate(d.start)} <span style={{color:'#bdc3c7'}}>~</span> {formatDate(d.end)} <br/>
-                          <span style={{color:'#e67e22'}}>({d.nights}박)</span>
-                        </div>
-                      </div>
-                      
-                      <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
-                        <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
-                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
-                            ① 입실 상태 확인
-                          </span>
-                          <input type="checkbox" checked={d.todo?.task1 || false} onChange={() => toggleTodo(d.id, 'task1')} />
-                        </label>
-                        
-                        <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
-                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task2 ? 'line-through' : 'none', color: d.todo?.task2 ? '#bdc3c7' : '#2c3e50'}}>
-                            ② 안내 문자 발송
-                          </span>
-                          <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
-                        </label>
-                        
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
-                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: isTask3Done ? 'line-through' : 'none', color: isTask3Done ? '#bdc3c7' : '#2c3e50'}}>
-                            ③ 퇴실 청소 진행
-                          </span>
-                          <div style={{display:'flex', gap:'15px'}}>
-                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
-                              자체청소 <input type="checkbox" checked={d.todo?.task3_self || false} onChange={() => toggleTodo(d.id, 'task3_self')} />
-                            </label>
-                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
-                              업체청소 <input type="checkbox" checked={d.todo?.task3_agency || false} onChange={() => toggleTodo(d.id, 'task3_agency')} />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }) : (
+                <div style={{marginBottom: '20px'}}>
+                   <button className="btn" style={{background: showCompletedTodo ? '#e1e8ed' : '#2980b9', color: showCompletedTodo ? '#333' : '#fff'}} onClick={() => setShowCompletedTodo(!showCompletedTodo)}>
+                     {showCompletedTodo ? '완료된 항목 접기 ▲' : `✅ 완료된 과거 항목 보기 (${completedTodoList.length}건) ▼`}
+                   </button>
+                </div>
+
+                {showCompletedTodo && (
+                   <div style={{marginBottom: '30px', padding: '15px', background: '#f8f9fa', borderRadius: '10px', border: '1px solid #ddd'}}>
+                     <h4 style={{marginTop:0, color:'#2c3e50', borderBottom:'2px solid #ccc', paddingBottom:'10px'}}>✅ 확인 완료된 과거 내역</h4>
+                     {completedTodoList.length > 0 ? completedTodoList.map(d => renderTodoCard(d, true)) : <p style={{fontSize:'13px', color:'#888'}}>완료된 항목이 없습니다.</p>}
+                   </div>
+                )}
+                
+                <h4 style={{marginTop:0, color:'#2c3e50', borderBottom:'2px solid #2c3e50', paddingBottom:'10px'}}>⏳ 진행 중인 일정</h4>
+                {activeTodoList.length > 0 ? activeTodoList.map(d => renderTodoCard(d, false)) : (
                   <div className="card" style={{textAlign:'center', padding:'50px 20px', color:'#27ae60'}}>
                     <div style={{fontSize:'35px', marginBottom:'15px'}}>🎉</div>
-                    <div style={{fontWeight:'bold', fontSize:'15px'}}>현재 기한 내에 진행해야 할 To-Do 항목이 없습니다!</div>
+                    <div style={{fontWeight:'bold', fontSize:'15px'}}>현재 진행해야 할 To-Do 항목이 없습니다!</div>
                   </div>
                 )}
               </div>
