@@ -141,8 +141,6 @@
       
       const [sortOrder, setSortOrder] = React.useState('desc');
       const [lastUpdated, setLastUpdated] = React.useState(null);
-      
-      // 💡 완료된 항목 보기/숨기기 상태 추가
       const [showCompletedTodo, setShowCompletedTodo] = React.useState(false);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
@@ -152,14 +150,40 @@
         ref.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
-            const parsedData = Object.values(data).map(d => ({
-              ...d,
-              start: d.start ? new Date(d.start) : null,
-              end: d.end ? new Date(d.end) : null,
-              // 💡 confirmed(완료 확인) 속성 초기화
-              todo: d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
-            }));
+            let needsUpdate = false;
+            
+            const parsedData = Object.values(data).map(d => {
+              const sDate = d.start ? new Date(d.start) : null;
+              let currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
+              
+              // 💡 2026년 11월 7일 이전의 일정은 '자체청소 완료' 상태로 일괄 자동 마이그레이션 처리
+              if (sDate && sDate.getTime() <= new Date(2026, 10, 7, 23, 59, 59).getTime()) {
+                if (!currentTodo.confirmed) {
+                  currentTodo = { task1: true, task2: true, task3_self: true, task3_agency: false, confirmed: true };
+                  needsUpdate = true; // 클라우드 동기화 필요 플래그
+                }
+              }
+              
+              return {
+                ...d,
+                start: sDate,
+                end: d.end ? new Date(d.end) : null,
+                todo: currentTodo
+              };
+            });
+            
             setAllData(parsedData);
+            
+            // 데이터 교정이 일어났을 경우에만 파이어베이스에 바로 업데이트 (최초 1회 동작)
+            if (needsUpdate) {
+              const cleanData = parsedData.map(d => ({
+                ...d,
+                start: d.start ? d.start.toISOString() : null,
+                end: d.end ? d.end.toISOString() : null
+              }));
+              ref.set(cleanData);
+            }
+            
           } else {
             setAllData([]);
           }
@@ -259,7 +283,6 @@
         saveToCloud(newData);
       };
 
-      // 💡 일정 완료(삭제) 확인 / 취소 토글 함수
       const confirmTodo = (id, isConfirmed) => {
         const newData = allData.map(d => {
           if (d.id === id) {
@@ -319,7 +342,6 @@
                   if(!startMatch || !endMatch) return;
 
                   const sDate = new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8));
-                  
                   let eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
                   let nights = Math.round((eDate - sDate)/(1000*60*60*24));
                   
@@ -521,7 +543,6 @@
       nextWeek.setDate(todayDate.getDate() + 7);
       nextWeek.setHours(23,59,59,999);
 
-      // 💡 To-Do 상태 분리: active(진행중) vs completed(완료됨)
       const activeTodoList = activeData.filter(d => {
         const inRange = d.end >= pastWeek && d.start <= nextWeek;
         return inRange && !d.todo?.confirmed;
@@ -531,7 +552,7 @@
       const completedTodoList = activeData.filter(d => {
         return d.todo?.confirmed;
       });
-      completedTodoList.sort((a,b) => b.start.getTime() - a.start.getTime()); // 최근 일정 순
+      completedTodoList.sort((a,b) => b.start.getTime() - a.start.getTime()); 
       
       let filteredList = validData.filter(d => {
         const safeName = String(d.name || '').toLowerCase();
@@ -662,7 +683,6 @@
         }
       });
 
-      // 💡 공통 To-Do 렌더링 헬퍼 함수
       const renderTodoCard = (d, isCompletedList) => {
         const isReadyToConfirm = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
         
@@ -709,7 +729,6 @@
               </div>
             </div>
 
-            {/* 💡 [완료 확인] 또는 [완료 취소] 버튼 */}
             {isCompletedList ? (
               <button className="btn" style={{marginTop:'15px', background:'#e1e8ed', color:'#333'}} onClick={() => confirmTodo(d.id, false)}>
                 ↩️ 완료 취소 (진행 중으로 되돌리기)
@@ -848,7 +867,6 @@
               </div>
             )}
             
-            {/* 💡 업그레이드 된 To-Do 탭 (완료 항목 확인 및 복구 가능) */}
             {activeTab === 'To-Do' && (
               <div>
                 <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
