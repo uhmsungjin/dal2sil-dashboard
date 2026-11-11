@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>스테이달이실 대시보드</title>
   
-  <!-- 💡 아이폰 및 모든 PC 브라우저 호환을 위한 완벽한 파비콘 적용 -->
   <link rel="icon" href="favicon180px.ico" type="image/x-icon">
   <link rel="shortcut icon" href="favicon180px.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="favicon180px.ico">
@@ -108,7 +107,7 @@
   
   <script type="text/babel">
     const firebaseConfig = {
-      apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iFZk0OPNhA",
+      apiKey: "AIzaSyDNodCEANyEMsO8C5wCE0ES7iয়ালiFZk0OPNhA",
       authDomain: "dal2sil-db.firebaseapp.com",
       projectId: "dal2sil-db",
       storageBucket: "dal2sil-db.firebasestorage.app",
@@ -304,8 +303,27 @@
                   if(!startMatch || !endMatch) return;
 
                   const sDate = new Date(startMatch[1].slice(0,4), parseInt(startMatch[1].slice(4,6))-1, startMatch[1].slice(6,8));
-                  const eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
-                  const nights = Math.round((eDate - sDate)/(1000*60*60*24));
+                  
+                  // 💡 ics 캘린더 전용 데이터 일정 길이 자동 교정 로직 
+                  let eDate = new Date(endMatch[1].slice(0,4), parseInt(endMatch[1].slice(4,6))-1, endMatch[1].slice(6,8));
+                  let nights = Math.round((eDate - sDate)/(1000*60*60*24));
+                  
+                  // 제목에 적힌 'X박' 을 찾아 실제 체크아웃 날짜를 역산합니다.
+                  const nightMatch = summary.match(/(\d+)박/);
+                  if (nightMatch) {
+                      nights = parseInt(nightMatch[1], 10);
+                      eDate = new Date(sDate);
+                      eDate.setDate(eDate.getDate() + nights);
+                  } else {
+                      // '박' 표기가 없을 경우 네이버 캘린더 시스템 특성상 하루 길게 출력되는 것을 뺌
+                      eDate.setDate(eDate.getDate() - 1);
+                      nights = Math.round((eDate - sDate)/(1000*60*60*24));
+                      if (nights <= 0) {
+                          nights = 1;
+                          eDate = new Date(sDate);
+                          eDate.setDate(eDate.getDate() + 1);
+                      }
+                  }
                   
                   let desc = (ev.match(/DESCRIPTION:([\s\S]*?)(?=\r?\n[A-Z\-]+[:;]|$)/) || ['', ''])[1].replace(/\\n/g, ' ').trim();
                   desc = desc.replace(/DTEND.*?$/g, '').replace(/DTSTART.*?$/g, '').replace(/CLASS.*?$/g, '').trim();
@@ -322,7 +340,7 @@
                     room: r,
                     name: extractName(summary),
                     fullTitle: summary,
-                    start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
+                    start: sDate, end: eDate, nights: nights, // 정확하게 교정된 데이터 입력
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
                     contact: contact,
                     guests: summary.match(/\d+/) ? parseInt(summary.match(/\d+/)[0]) : 2,
@@ -706,14 +724,10 @@
                       <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
                         {week.map((date, dIndex) => {
                           const isToday = date && date.getTime() === todayTime;
-                          // 💡 수정됨: 오늘 날짜인 경우 전체 배경을 짙은 회색(#5a6268)으로 변경 
-                          const cellBg = !date ? '#f9f9f9' : (isToday ? '#5a6268' : '#fff');
-                          
                           return (
-                            <div key={dIndex} className="cal-cell" style={{background: cellBg}}>
+                            <div key={dIndex} className="cal-cell" style={{background: !date ? '#f9f9f9' : (isToday ? '#5a6268' : '#fff')}}>
                               {date && (
                                 <div style={{textAlign:'left', marginBottom:'2px'}}>
-                                  {/* 💡 수정됨: 오늘 날짜 글씨 색상을 무조건 흰색(#ffffff)으로 고정 */}
                                   <span className="cal-date" style={{
                                     color: isToday ? '#ffffff' : (date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')),
                                     fontWeight: 'bold',
