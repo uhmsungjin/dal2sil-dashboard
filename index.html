@@ -21,7 +21,6 @@
     header { background: #2c3e50; color: white; padding: 10px 15px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 15px; border-bottom: 3px solid #FFBB00; flex-wrap: wrap;}
     .header-logo { max-height: 28px; }
     
-    /* 💡 추가됨: 헤더 업데이트 텍스트 스타일 */
     .header-update { font-size: 12px; color: #f1c40f; font-weight: 500; letter-spacing: 0.5px; }
     
     .content { flex: 1; padding: 12px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
@@ -68,7 +67,6 @@
     .filter-bar input { margin: 0; flex: 2; }
     .filter-bar select { margin: 0; flex: 1; padding: 8px;}
 
-    /* 💡 추가됨: 파일연동 탭 반응형 레이아웃 CSS */
     .sync-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;}
     .sync-box { flex: 1; background: #f8f9fa; padding: 18px; border-radius: 10px; border: 1px solid #e1e8ed; }
     .sync-label { display: block; font-size: 13px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
@@ -86,8 +84,6 @@
       .cal-cell { min-height: 105px; } 
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
-      
-      /* PC에서 파일연동 영역 가로 2단 분리 */
       .sync-container { flex-direction: row; }
     }
     @media (max-width: 767px) {
@@ -142,7 +138,6 @@
       
       const [sortOrder, setSortOrder] = React.useState('desc');
       
-      // 💡 업데이트 일시 표시용 State
       const [lastUpdated, setLastUpdated] = React.useState(null);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
@@ -164,7 +159,6 @@
           }
         });
 
-        // 💡 메타데이터(업데이트 일시) 로드
         const metaRef = db.ref('dal2sil_meta/lastUpdated');
         metaRef.on('value', (snapshot) => {
           setLastUpdated(snapshot.val());
@@ -191,7 +185,6 @@
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       };
 
-      // 💡 업데이트 일시 문자열 포맷팅
       const formatUpdateDate = (dateString) => {
         if (!dateString) return '';
         const d = new Date(dateString);
@@ -392,7 +385,6 @@
                 
                 saveToCloud(finalArray);
                 
-                // 💡 연동 성공 시 업데이트 기록 저장
                 db.ref('dal2sil_meta/lastUpdated').set(new Date().toISOString());
 
                 alert("연동 완료! 문제가 있는 내역은 [확인필요] 탭을 점검하세요.");
@@ -709,18 +701,20 @@
                     return (
                       <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
                         {week.map((date, dIndex) => {
-                          // 💡 오늘 날짜 강조 로직
                           const isToday = date && date.getTime() === todayTime;
+                          // 💡 셀(블록) 전체 배경을 어둡게 적용 (오늘인 경우 #e2e8f0, 아니면 흰색)
+                          const cellBg = !date ? '#f9f9f9' : (isToday ? '#e2e8f0' : '#fff');
+                          
                           return (
-                            <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
+                            <div key={dIndex} className="cal-cell" style={{background: cellBg}}>
                               {date && (
                                 <div style={{textAlign:'left', marginBottom:'2px'}}>
                                   <span className="cal-date" style={{
-                                    color: isToday ? '#fff' : (date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')),
-                                    background: isToday ? '#2c3e50' : 'transparent',
+                                    color: isToday ? '#2c3e50' : (date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')),
+                                    fontWeight: isToday ? '900' : 'bold',
+                                    textDecoration: isToday ? 'underline' : 'none',
                                     display: 'inline-block',
-                                    padding: isToday ? '2px 6px' : '0 2px',
-                                    borderRadius: isToday ? '6px' : '0'
+                                    padding: '0 2px'
                                   }}>
                                     {date.getDate()}
                                   </span>
@@ -966,7 +960,6 @@
               </div>
             )}
 
-            {/* 💡 새로 적용된 파일연동 레이아웃 */}
             {activeTab === '파일연동' && (
               <div>
                 <h3 style={{marginTop:0}}>☁️ 클라우드 파일 연동</h3>
