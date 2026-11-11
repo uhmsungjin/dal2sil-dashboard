@@ -34,7 +34,6 @@
     .bg-hill { background: #d5f5e3; color: #27ae60; border: 1px solid #abebc6; } 
     .bg-gray { background: #6c757d; color: #fff; border: 1px solid #5a6268; } 
     
-    /* 체크박스는 가로 100%를 무시하도록 예외 처리 */
     input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; font-size: 13px;}
     input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #27ae60;}
     
@@ -42,11 +41,17 @@
     
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; }
     
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden;}
-    .cal-header { background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; }
-    .cal-cell { background: #fff; min-height: 90px; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
-    .cal-date { font-size: 11px; color: #888; margin-bottom: 4px; font-weight: bold; }
-    .cal-event { font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; line-height: 1.3; word-break: break-all; font-weight: 600;}
+    /* 💡 완벽하게 복구된 연속 막대(트랙) 캘린더 디자인 */
+    .cal-grid-wrapper { display: flex; flex-direction: column; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
+    .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; border-bottom: 1px solid #ddd;}
+    .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); position: relative; border-bottom: 1px solid #eee; background: #fff; }
+    .cal-cell { padding: 5px; border-right: 1px solid #f9f9f9; box-sizing: border-box; display: flex; flex-direction: column;}
+    .cal-date { font-size: 11px; color: #888; font-weight: bold; margin-bottom: 2px;}
+    
+    .event-bar { position: absolute; height: 22px; line-height: 22px; border-radius: 4px; font-size: 11px; padding: 0 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border-left: 3px solid rgba(0,0,0,0.2); box-sizing: border-box; z-index: 10;}
+    .event-front { background: #ffe3e3; color: #c0392b;}
+    .event-back { background: #d4e6f1; color: #2980b9;}
+    .event-hill { background: #d5f5e3; color: #27ae60;}
 
     .event-text-pc { display: none; }
     .event-text-mobile { display: inline; }
@@ -72,8 +77,8 @@
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0; min-width:80px;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
-      .cal-cell { min-height: 105px; } 
-      .cal-event { font-size: 11px; padding: 6px; }
+      .cal-cell { min-height: 110px; } 
+      .event-bar { height: 24px; line-height: 24px; font-size: 12px; }
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
     }
@@ -107,7 +112,6 @@
     const db = firebase.database();
 
     function App() {
-      // 💡 To-Do 탭 메뉴 추가
       const tabs = ['운영관리', 'To-Do', '이용통계', '예약자료', '확인필요', '직접입력', '파일연동'];
       const [activeTab, setActiveTab] = React.useState('운영관리');
       
@@ -137,7 +141,7 @@
               ...d,
               start: d.start ? new Date(d.start) : null,
               end: d.end ? new Date(d.end) : null,
-              todo: d.todo || { task1: false, task2: false, task3: false } // To-Do 상태 보장
+              todo: d.todo || { task1: false, task2: false, task3: false }
             }));
             setAllData(parsedData);
           } else {
@@ -206,7 +210,6 @@
         return summary.split('/')[0].replace(/\[|\]/g, '').trim();
       };
 
-      // 💡 To-Do 체크박스 토글 함수
       const toggleTodo = (id, taskKey) => {
         const newData = allData.map(d => {
           if (d.id === id) {
@@ -283,7 +286,7 @@
                   icList.push({
                     room: r,
                     name: extractName(summary),
-                    fullTitle: summary,
+                    fullTitle: summary, 
                     start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
                     contact: contact,
@@ -294,7 +297,6 @@
                   });
                 });
 
-                // 💡 To-Do 상태 보존용 매핑 추가
                 const existingTodos = {};
                 allData.forEach(d => {
                   if (d.start) {
@@ -340,7 +342,7 @@
                   return {
                     ...d, 
                     id: d.id || `id_${Date.now()}_${Math.random()}`,
-                    todo: existingTodos[key] || { task1: false, task2: false, task3: false } // 기존 To-Do 상태 삽입
+                    todo: existingTodos[key] || { task1: false, task2: false, task3: false }
                   }
                 });
                 
@@ -426,11 +428,14 @@
         if(s === '취소') return 'bg-gray';
         return r === '앞집' ? 'bg-front' : (r === '뒷집' ? 'bg-back' : 'bg-hill');
       };
+      
+      const getEventBarClass = (r) => {
+        return r === '앞집' ? 'event-front' : (r === '뒷집' ? 'event-back' : 'event-hill');
+      };
 
       const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
       const activeData = validData.filter(d => d.status !== '취소');
       
-      // 💡 To-Do 목록 필터링 (최근 7일 ~ 미래 7일 예약 중 완료되지 않은 것)
       const todayDate = new Date();
       todayDate.setHours(0,0,0,0);
       const pastWeek = new Date(todayDate);
@@ -535,6 +540,7 @@
       };
       const conflicts = getConflicts();
 
+      // 💡 캘린더 주차별 분할 및 스마트 연속 막대 할당 로직
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -545,6 +551,17 @@
       };
       const daysInMonth = getDaysInMonth(currentMonth);
       const changeMonth = (offset) => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1));
+      
+      const weeks = [];
+      let currentWeek = [];
+      daysInMonth.forEach((day, index) => {
+        currentWeek.push(day);
+        if (currentWeek.length === 7 || index === daysInMonth.length - 1) {
+          while (currentWeek.length < 7) currentWeek.push(null);
+          weeks.push(currentWeek);
+          currentWeek = [];
+        }
+      });
 
       return (
         <div className="app-container">
@@ -561,6 +578,7 @@
 
           <div className="content">
             
+            {/* 💡 운영관리 탭: 가로 연속 막대 캘린더 복원 적용 */}
             {activeTab === '운영관리' && (
               <div>
                 <div className="cal-controls" style={{marginTop:'5px'}}>
@@ -569,29 +587,86 @@
                   <button className="btn" style={{width:'auto', padding:'8px 12px', background:'#f1f3f5', color:'#333'}} onClick={() => changeMonth(1)}>▶</button>
                 </div>
                 
-                <div className="cal-grid">
-                  {['일', '월', '화', '수', '목', '금', '토'].map(day => (
-                    <div key={day} className="cal-header" style={{color: day==='일' ? '#e74c3c' : (day==='토' ? '#3498db' : '#555')}}>{day}</div>
-                  ))}
-                  {daysInMonth.map((date, i) => {
-                    if (!date) return <div key={`empty-${i}`} className="cal-cell" style={{background:'#f9f9f9'}}></div>;
+                <div className="cal-grid-wrapper">
+                  <div className="cal-header-row">
+                    <div style={{color:'#e74c3c'}}>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style={{color:'#3498db'}}>토</div>
+                  </div>
+                  
+                  {weeks.map((week, wIndex) => {
+                    const ws = new Date(week.find(d => d !== null));
+                    ws.setHours(0,0,0,0);
+                    const we = new Date([...week].reverse().find(d => d !== null));
+                    we.setHours(23,59,59,999); 
                     
-                    const dayEvents = activeData.filter(d => {
-                      const dTime = date.getTime();
-                      return dTime >= d.start.getTime() && dTime <= d.end.getTime(); 
+                    if(!ws) return null;
+                    
+                    let weekEvents = activeData.filter(d => {
+                      // 💡 퇴실일(end)까지 포함하여(<=) 달력에 막대가 표시됩니다.
+                      return d.start.getTime() <= we.getTime() && d.end.getTime() >= ws.getTime();
                     });
                     
+                    weekEvents.sort((a,b) => {
+                      if (a.start.getTime() !== b.start.getTime()) return a.start.getTime() - b.start.getTime();
+                      return b.nights - a.nights; 
+                    });
+
+                    const tracks = [];
+                    const renderedEvents = weekEvents.map(ev => {
+                      let startDayIndex = 0;
+                      if (ev.start >= ws) startDayIndex = ev.start.getDay();
+                      
+                      let endDayIndex = 6;
+                      if (ev.end <= we) endDayIndex = ev.end.getDay();
+                      
+                      const span = endDayIndex - startDayIndex + 1;
+                      
+                      let trackIdx = 0;
+                      while(true) {
+                        if(!tracks[trackIdx]) tracks[trackIdx] = [false,false,false,false,false,false,false];
+                        let collision = false;
+                        for(let i=startDayIndex; i<=endDayIndex; i++) {
+                          if(tracks[trackIdx][i]) { collision = true; break; }
+                        }
+                        if(!collision) {
+                          for(let i=startDayIndex; i<=endDayIndex; i++) {
+                            tracks[trackIdx][i] = true;
+                          }
+                          break;
+                        }
+                        trackIdx++;
+                      }
+                      
+                      return { ...ev, startDayIndex, span, trackIdx };
+                    });
+
+                    const rowMinHeight = Math.max(90, 35 + (tracks.length * 26));
+
                     return (
-                      <div key={i} className="cal-cell">
-                        <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>
-                          {date.getDate()}
-                        </div>
-                        {dayEvents.map((ev, idx) => (
-                          <div key={idx} className={`cal-event ${getBadgeClass(ev.room, ev.status)}`} onClick={() => openModal(ev)}>
-                            <span className="event-text-pc">{ev.fullTitle || ev.name}</span>
-                            <span className="event-text-mobile">{ev.name}</span>
+                      <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
+                        {week.map((date, dIndex) => (
+                          <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
+                            {date && <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>{date.getDate()}</div>}
                           </div>
                         ))}
+                        
+                        {renderedEvents.map(ev => {
+                          const topPos = 25 + (ev.trackIdx * 26);
+                          return (
+                            <div 
+                              key={ev.id} 
+                              className={`event-bar ${getEventBarClass(ev.room)}`}
+                              style={{
+                                left: `calc((100% / 7) * ${ev.startDayIndex} + 4px)`,
+                                width: `calc((100% / 7) * ${ev.span} - 8px)`,
+                                top: `${topPos}px`
+                              }}
+                              onClick={() => openModal(ev)}
+                            >
+                              <span className="event-text-pc">{ev.fullTitle || ev.name}</span>
+                              <span className="event-text-mobile">{ev.name}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -599,12 +674,12 @@
               </div>
             )}
             
-            {/* 💡 신규 추가된 To-Do 탭 */}
+            {/* 💡 To-Do 탭 */}
             {activeTab === 'To-Do' && (
               <div>
-                <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 실무 To-Do 리스트</h3>
+                <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
                 <p style={{fontSize:'13px', color:'#7f8c8d', marginBottom:'20px', marginTop:0}}>
-                  오늘 기준 앞뒤 1주일의 예약 목록입니다. 3가지 업무를 모두 체크하면 목록에서 사라집니다.
+                  3가지 업무를 모두 체크하면 목록에서 사라집니다.
                 </p>
                 
                 {todoList.length > 0 ? todoList.map((d, idx) => (
@@ -630,7 +705,7 @@
                       <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
                         <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
                         <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task2 ? 'line-through' : 'none', color: d.todo?.task2 ? '#bdc3c7' : '#2c3e50'}}>
-                          ② 입실 안내 문자 발송
+                          ② 안내 문자 발송
                         </span>
                       </label>
                       <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
