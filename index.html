@@ -41,7 +41,6 @@
     
     .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; }
     
-    /* 💡 완벽하게 복구된 연속 막대(트랙) 캘린더 디자인 */
     .cal-grid-wrapper { display: flex; flex-direction: column; background: #eee; border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
     .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); background: #f8f9fa; text-align: center; font-size: 12px; padding: 8px 0; font-weight: bold; color: #555; border-bottom: 1px solid #ddd;}
     .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); position: relative; border-bottom: 1px solid #eee; background: #fff; }
@@ -77,8 +76,7 @@
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0; min-width:80px;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
-      .cal-cell { min-height: 110px; } 
-      .event-bar { height: 24px; line-height: 24px; font-size: 12px; }
+      .cal-cell { min-height: 105px; } 
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
     }
@@ -141,7 +139,8 @@
               ...d,
               start: d.start ? new Date(d.start) : null,
               end: d.end ? new Date(d.end) : null,
-              todo: d.todo || { task1: false, task2: false, task3: false }
+              // 💡 To-Do 구조 변경: task3가 자체청소와 업체청소로 분리됨
+              todo: d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false }
             }));
             setAllData(parsedData);
           } else {
@@ -210,11 +209,18 @@
         return summary.split('/')[0].replace(/\[|\]/g, '').trim();
       };
 
+      // 💡 To-Do 체크박스 토글 함수 (청소 유형 배타적 선택 로직 포함)
       const toggleTodo = (id, taskKey) => {
         const newData = allData.map(d => {
           if (d.id === id) {
-            const currentTodo = d.todo || { task1: false, task2: false, task3: false };
-            return { ...d, todo: { ...currentTodo, [taskKey]: !currentTodo[taskKey] } };
+            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false };
+            let updatedTodo = { ...currentTodo, [taskKey]: !currentTodo[taskKey] };
+            
+            // 자체청소 체크 시 업체청소 해제, 반대도 동일
+            if (taskKey === 'task3_self' && updatedTodo.task3_self) updatedTodo.task3_agency = false;
+            if (taskKey === 'task3_agency' && updatedTodo.task3_agency) updatedTodo.task3_self = false;
+
+            return { ...d, todo: updatedTodo };
           }
           return d;
         });
@@ -297,11 +303,18 @@
                   });
                 });
 
+                // 기존 To-Do 상태 마이그레이션 및 보존
                 const existingTodos = {};
                 allData.forEach(d => {
                   if (d.start) {
                     const key = `${d.room}_${formatDate(d.start)}`;
-                    existingTodos[key] = d.todo || { task1: false, task2: false, task3: false };
+                    const oldTodo = d.todo || {};
+                    existingTodos[key] = {
+                      task1: oldTodo.task1 || false,
+                      task2: oldTodo.task2 || false,
+                      task3_self: oldTodo.task3_self || oldTodo.task3 || false, // 예전 데이터 호환
+                      task3_agency: oldTodo.task3_agency || false
+                    };
                   }
                 });
 
@@ -342,7 +355,7 @@
                   return {
                     ...d, 
                     id: d.id || `id_${Date.now()}_${Math.random()}`,
-                    todo: existingTodos[key] || { task1: false, task2: false, task3: false }
+                    todo: existingTodos[key] || { task1: false, task2: false, task3_self: false, task3_agency: false }
                   }
                 });
                 
@@ -373,7 +386,7 @@
           start: sDate, end: eDate, nights: n,
           status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo,
           price: p, refund: 0, revenue: p,
-          todo: { task1: false, task2: false, task3: false }
+          todo: { task1: false, task2: false, task3_self: false, task3_agency: false }
         };
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
@@ -401,7 +414,7 @@
           contact: editForm.contact,
           revenue: rev,
           memo: editForm.memo,
-          todo: selectedEvent.todo || { task1: false, task2: false, task3: false },
+          todo: selectedEvent.todo || { task1: false, task2: false, task3_self: false, task3_agency: false },
           fullTitle: `[${editForm.room}] ${editForm.name}/ ${n}박` 
         };
 
@@ -444,9 +457,10 @@
       nextWeek.setDate(todayDate.getDate() + 7);
       nextWeek.setHours(23,59,59,999);
 
+      // 💡 To-Do 필터 로직: 3번째는 자체나 업체 중 하나만 완료해도 리스트에서 제외
       const todoList = activeData.filter(d => {
         const inRange = d.end >= pastWeek && d.start <= nextWeek;
-        const isCompleted = d.todo?.task1 && d.todo?.task2 && d.todo?.task3;
+        const isCompleted = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
         return inRange && !isCompleted;
       });
       
@@ -475,6 +489,7 @@
         nightsStats[d.nights] = (nightsStats[d.nights] || 0) + 1;
       });
 
+      // 💡 업체청소 비용 계산을 위해 monthly 객체에 agencyClean 초기값 설정
       const statsObj = {
         overall: { revenue: 0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} },
         monthly: {}
@@ -492,7 +507,7 @@
         const monthKey = `${sYear}-${sMonth}`;
 
         if (!statsObj.monthly[monthKey]) {
-          statsObj.monthly[monthKey] = { revenue:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
+          statsObj.monthly[monthKey] = { revenue:0, agencyClean:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
         }
 
         const rev = d.revenue || 0;
@@ -502,20 +517,35 @@
         statsObj.monthly[monthKey].rooms[d.room].rev += rev;
 
         if (d.status !== '취소') {
+          // 객실 가동률 계산
           let curr = new Date(d.start);
           while(curr < d.end) {
             const currKey = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}`;
             if (!statsObj.monthly[currKey]) {
-              statsObj.monthly[currKey] = { revenue:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
+              statsObj.monthly[currKey] = { revenue:0, agencyClean:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
             }
             statsObj.overall.rooms[d.room].nights++;
             statsObj.monthly[currKey].rooms[d.room].nights++;
             curr.setDate(curr.getDate() + 1);
           }
+          
+          // 💡 업체청소 카운트 (청소가 진행되는 퇴실일 기준 달에 합산)
+          if (d.todo?.task3_agency) {
+            const endMonthKey = `${d.end.getFullYear()}-${String(d.end.getMonth()+1).padStart(2,'0')}`;
+            if (!statsObj.monthly[endMonthKey]) {
+              statsObj.monthly[endMonthKey] = { revenue:0, agencyClean:0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} };
+            }
+            statsObj.monthly[endMonthKey].agencyClean += 1;
+          }
         }
       });
 
       const overallTotalDays = minDate < maxDate ? Math.max(1, Math.round((maxDate - minDate)/(1000*60*60*24))) : 1;
+      
+      // 💡 전체 객실 가동률 (3개 객실 총 이용가능일 수 대비)
+      const totalAvailableNights = overallTotalDays * 3;
+      const totalOccupiedNights = statsObj.overall.rooms['앞집'].nights + statsObj.overall.rooms['뒷집'].nights + statsObj.overall.rooms['언덕집'].nights;
+      const overallOccupancyRate = Math.round((totalOccupiedNights / totalAvailableNights) * 100) || 0;
 
       const getConflicts = () => {
         const issues = [];
@@ -540,7 +570,6 @@
       };
       const conflicts = getConflicts();
 
-      // 💡 캘린더 주차별 분할 및 스마트 연속 막대 할당 로직
       const getDaysInMonth = (date) => {
         const year = date.getFullYear(); const month = date.getMonth();
         const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
@@ -578,7 +607,6 @@
 
           <div className="content">
             
-            {/* 💡 운영관리 탭: 가로 연속 막대 캘린더 복원 적용 */}
             {activeTab === '운영관리' && (
               <div>
                 <div className="cal-controls" style={{marginTop:'5px'}}>
@@ -601,7 +629,6 @@
                     if(!ws) return null;
                     
                     let weekEvents = activeData.filter(d => {
-                      // 💡 퇴실일(end)까지 포함하여(<=) 달력에 막대가 표시됩니다.
                       return d.start.getTime() <= we.getTime() && d.end.getTime() >= ws.getTime();
                     });
                     
@@ -674,49 +701,60 @@
               </div>
             )}
             
-            {/* 💡 To-Do 탭 */}
+            {/* 💡 업데이트 된 To-Do 탭 */}
             {activeTab === 'To-Do' && (
               <div>
-                <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
-                <p style={{fontSize:'13px', color:'#7f8c8d', marginBottom:'20px', marginTop:0}}>
-                  3가지 업무를 모두 체크하면 목록에서 사라집니다.
-                </p>
+                <h3 style={{marginTop:0, marginBottom:'20px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
                 
-                {todoList.length > 0 ? todoList.map((d, idx) => (
-                  <div key={d.id} className="card" style={{borderLeft: `5px solid ${d.room==='앞집'?'#e74c3c':(d.room==='뒷집'?'#3498db':'#27ae60')}`, padding:'20px'}}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px', borderBottom:'1px dashed #eee', paddingBottom:'15px'}}>
-                      <div>
-                        <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
-                        <strong style={{marginLeft:'8px', fontSize:'16px'}}>{d.name}</strong> 
+                {todoList.length > 0 ? todoList.map((d, idx) => {
+                  const isTask3Done = d.todo?.task3_self || d.todo?.task3_agency;
+                  return (
+                    <div key={d.id} className="card" style={{borderLeft: `5px solid ${d.room==='앞집'?'#e74c3c':(d.room==='뒷집'?'#3498db':'#27ae60')}`, padding:'20px'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'15px', borderBottom:'1px dashed #eee', paddingBottom:'15px'}}>
+                        <div>
+                          <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                          <strong style={{marginLeft:'8px', fontSize:'16px'}}>{d.name}</strong> 
+                        </div>
+                        <div style={{fontSize:'13px', fontWeight:'bold', color:'#34495e', textAlign:'right'}}>
+                          {formatDate(d.start)} <span style={{color:'#bdc3c7'}}>~</span> {formatDate(d.end)} <br/>
+                          <span style={{color:'#e67e22'}}>({d.nights}박)</span>
+                        </div>
                       </div>
-                      <div style={{fontSize:'13px', fontWeight:'bold', color:'#34495e', textAlign:'right'}}>
-                        {formatDate(d.start)} <span style={{color:'#bdc3c7'}}>~</span> {formatDate(d.end)} <br/>
-                        <span style={{color:'#e67e22'}}>({d.nights}박)</span>
+                      
+                      <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                        {/* 💡 체크박스 오른쪽 정렬 */}
+                        <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
+                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
+                            ① 입실 상태 확인
+                          </span>
+                          <input type="checkbox" checked={d.todo?.task1 || false} onChange={() => toggleTodo(d.id, 'task1')} />
+                        </label>
+                        
+                        <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
+                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task2 ? 'line-through' : 'none', color: d.todo?.task2 ? '#bdc3c7' : '#2c3e50'}}>
+                            ② 안내 문자 발송
+                          </span>
+                          <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
+                        </label>
+                        
+                        {/* 💡 퇴실 청소 2가지 분리 */}
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
+                          <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: isTask3Done ? 'line-through' : 'none', color: isTask3Done ? '#bdc3c7' : '#2c3e50'}}>
+                            ③ 퇴실 청소 진행
+                          </span>
+                          <div style={{display:'flex', gap:'15px'}}>
+                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                              자체청소 <input type="checkbox" checked={d.todo?.task3_self || false} onChange={() => toggleTodo(d.id, 'task3_self')} />
+                            </label>
+                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                              업체청소 <input type="checkbox" checked={d.todo?.task3_agency || false} onChange={() => toggleTodo(d.id, 'task3_agency')} />
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    
-                    <div style={{display:'flex', flexDirection:'column', gap:'12px', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
-                      <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
-                        <input type="checkbox" checked={d.todo?.task1 || false} onChange={() => toggleTodo(d.id, 'task1')} />
-                        <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
-                          ① 입실 상태 확인
-                        </span>
-                      </label>
-                      <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
-                        <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
-                        <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task2 ? 'line-through' : 'none', color: d.todo?.task2 ? '#bdc3c7' : '#2c3e50'}}>
-                          ② 안내 문자 발송
-                        </span>
-                      </label>
-                      <label style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
-                        <input type="checkbox" checked={d.todo?.task3 || false} onChange={() => toggleTodo(d.id, 'task3')} />
-                        <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task3 ? 'line-through' : 'none', color: d.todo?.task3 ? '#bdc3c7' : '#2c3e50'}}>
-                          ③ 퇴실 청소 진행
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                )) : (
+                  );
+                }) : (
                   <div className="card" style={{textAlign:'center', padding:'50px 20px', color:'#27ae60'}}>
                     <div style={{fontSize:'35px', marginBottom:'15px'}}>🎉</div>
                     <div style={{fontWeight:'bold', fontSize:'15px'}}>현재 기한 내에 진행해야 할 To-Do 항목이 없습니다!</div>
@@ -808,12 +846,15 @@
                       앞 {formatMoney(statsObj.overall.rooms['앞집'].rev)} <br/> 뒷 {formatMoney(statsObj.overall.rooms['뒷집'].rev)} <br/> 언덕 {formatMoney(statsObj.overall.rooms['언덕집'].rev)}
                     </div>
                   </div>
-                  <div className="stat-box">
-                    <div style={{fontSize:'13px', color:'#555', fontWeight:'bold'}}>전체 누적 입주율</div>
-                    <div className="stat-num" style={{fontSize:'16px', display:'flex', flexDirection:'column', gap:'5px', alignItems:'center', marginTop:'15px'}}>
-                      <span className="badge bg-front">앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}%</span>
-                      <span className="badge bg-back">뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}%</span>
-                      <span className="badge bg-hill">언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}%</span>
+                  
+                  {/* 💡 수정됨: 전체 가동률 추가 산출 */}
+                  <div className="stat-box" style={{border:'2px solid #2980b9'}}>
+                    <div style={{fontSize:'13px', color:'#555', fontWeight:'bold'}}>전체 누적 가동률</div>
+                    <div className="stat-num" style={{color:'#2980b9'}}>{overallOccupancyRate}%</div>
+                    <div style={{fontSize:'12px', display:'flex', flexDirection:'column', gap:'3px', alignItems:'center', marginTop:'8px'}}>
+                      <span className="badge bg-front" style={{margin:0}}>앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}%</span>
+                      <span className="badge bg-back" style={{margin:0}}>뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}%</span>
+                      <span className="badge bg-hill" style={{margin:0}}>언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -823,16 +864,26 @@
                   const mData = statsObj.monthly[mKey];
                   const [y, m] = mKey.split('-');
                   const daysInMonth = new Date(parseInt(y), parseInt(m), 0).getDate();
+                  const agencyCost = (mData.agencyClean || 0) * 70000;
+
                   return (
                     <div key={mKey} className="card" style={{marginBottom:'15px'}}>
                       <h4 style={{margin:'0 0 15px 0', color:'#2c3e50', fontSize:'17px'}}>{y}년 {parseInt(m)}월</h4>
+                      
                       <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
                         <div style={{background:'#f8f9fa', padding:'12px', borderRadius:'8px', borderLeft:'4px solid #FFBB00'}}>
                           <div style={{fontSize:'12px', color:'#777'}}>해당 월 발생 총 매출</div>
                           <div style={{fontSize:'18px', fontWeight:'bold', color:'#d35400'}}>{formatMoney(mData.revenue)}</div>
                         </div>
+                        
+                        {/* 💡 추가됨: 월별 업체청소 건수 및 비용 합산 */}
+                        <div style={{background:'#f8f9fa', padding:'12px', borderRadius:'8px', borderLeft:'4px solid #9b59b6'}}>
+                          <div style={{fontSize:'12px', color:'#777', marginBottom:'5px'}}>해당 월 업체청소 비용 ({mData.agencyClean || 0}건)</div>
+                          <div style={{fontSize:'16px', fontWeight:'bold', color:'#8e44ad'}}>- {formatMoney(agencyCost)}</div>
+                        </div>
+
                         <div style={{background:'#f8f9fa', padding:'12px', borderRadius:'8px', borderLeft:'4px solid #27ae60'}}>
-                          <div style={{fontSize:'12px', color:'#777', marginBottom:'5px'}}>월간 객실별 입주(가동)율</div>
+                          <div style={{fontSize:'12px', color:'#777', marginBottom:'5px'}}>객실별 가동률</div>
                           <div style={{display:'flex', gap:'5px', flexWrap:'wrap'}}>
                             <span className="badge bg-front">앞집 {Math.round((mData.rooms['앞집'].nights / daysInMonth) * 100) || 0}%</span>
                             <span className="badge bg-back">뒷집 {Math.round((mData.rooms['뒷집'].nights / daysInMonth) * 100) || 0}%</span>
