@@ -77,12 +77,14 @@
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
       .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
       .cal-cell { min-height: 105px; } 
+      .cal-event { font-size: 11px; padding: 6px; }
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
     }
     @media (max-width: 767px) {
       nav { position: fixed; bottom: 0; width: 100%; border-top: 1px solid #ddd; }
       nav button.active { border-top: 3px solid #FFBB00; }
+      .filter-bar { flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -127,6 +129,9 @@
       const [searchTerm, setSearchTerm] = React.useState('');
       const [filterRoom, setFilterRoom] = React.useState('전체');
       const [filterStatus, setFilterStatus] = React.useState('전체');
+      
+      // 💡 예약자료 정렬 기준 상태 추가 ('desc': 최신순, 'asc': 과거순)
+      const [sortOrder, setSortOrder] = React.useState('desc');
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
 
@@ -139,7 +144,6 @@
               ...d,
               start: d.start ? new Date(d.start) : null,
               end: d.end ? new Date(d.end) : null,
-              // 💡 To-Do 구조 변경: task3가 자체청소와 업체청소로 분리됨
               todo: d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false }
             }));
             setAllData(parsedData);
@@ -209,14 +213,12 @@
         return summary.split('/')[0].replace(/\[|\]/g, '').trim();
       };
 
-      // 💡 To-Do 체크박스 토글 함수 (청소 유형 배타적 선택 로직 포함)
       const toggleTodo = (id, taskKey) => {
         const newData = allData.map(d => {
           if (d.id === id) {
             const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false };
             let updatedTodo = { ...currentTodo, [taskKey]: !currentTodo[taskKey] };
             
-            // 자체청소 체크 시 업체청소 해제, 반대도 동일
             if (taskKey === 'task3_self' && updatedTodo.task3_self) updatedTodo.task3_agency = false;
             if (taskKey === 'task3_agency' && updatedTodo.task3_agency) updatedTodo.task3_self = false;
 
@@ -303,7 +305,6 @@
                   });
                 });
 
-                // 기존 To-Do 상태 마이그레이션 및 보존
                 const existingTodos = {};
                 allData.forEach(d => {
                   if (d.start) {
@@ -312,7 +313,7 @@
                     existingTodos[key] = {
                       task1: oldTodo.task1 || false,
                       task2: oldTodo.task2 || false,
-                      task3_self: oldTodo.task3_self || oldTodo.task3 || false, // 예전 데이터 호환
+                      task3_self: oldTodo.task3_self || oldTodo.task3 || false,
                       task3_agency: oldTodo.task3_agency || false
                     };
                   }
@@ -446,7 +447,7 @@
         return r === '앞집' ? 'event-front' : (r === '뒷집' ? 'event-back' : 'event-hill');
       };
 
-      const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf())).sort((a,b) => a.start.getTime() - b.start.getTime());
+      const validData = allData.filter(d => d.start && !isNaN(d.start.valueOf()));
       const activeData = validData.filter(d => d.status !== '취소');
       
       const todayDate = new Date();
@@ -457,26 +458,34 @@
       nextWeek.setDate(todayDate.getDate() + 7);
       nextWeek.setHours(23,59,59,999);
 
-      // 💡 To-Do 필터 로직: 3번째는 자체나 업체 중 하나만 완료해도 리스트에서 제외
       const todoList = activeData.filter(d => {
         const inRange = d.end >= pastWeek && d.start <= nextWeek;
         const isCompleted = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
         return inRange && !isCompleted;
       });
+      // To-Do는 임박한 날짜(시작일) 순서대로 정렬
+      todoList.sort((a,b) => a.start.getTime() - b.start.getTime());
       
-      const filteredList = validData.filter(d => {
+      // 💡 예약자료 리스트: 상태/옵션에 따라 실시간 정렬
+      let filteredList = validData.filter(d => {
         const safeName = String(d.name || '').toLowerCase();
         const matchName = safeName.includes(searchTerm.toLowerCase());
         const matchRoom = filterRoom === '전체' || d.room === filterRoom;
         const matchStatus = filterStatus === '전체' || d.status === filterStatus;
         return matchName && matchRoom && matchStatus;
       });
+      
+      filteredList.sort((a, b) => {
+        return sortOrder === 'desc' 
+          ? b.start.getTime() - a.start.getTime() 
+          : a.start.getTime() - b.start.getTime();
+      });
 
+      // 💡 [이용통계] 지표 세분화 계산 로직
       const totalRes = activeData.length;
-      const totalNights = activeData.reduce((acc, cur) => acc + (cur.nights || 0), 0);
-      const avgNights = totalRes > 0 ? (totalNights / totalRes).toFixed(1) : 0;
       const totalGuests = activeData.reduce((acc, cur) => acc + (cur.guests || 2), 0);
-      const avgGuests = totalRes > 0 ? (totalGuests / totalRes).toFixed(1) : 0;
+      const totalNights = activeData.filter(d => d.room === '앞집' || d.room === '뒷집').reduce((acc, cur) => acc + (cur.nights || 0), 0);
+      const totalRentals = activeData.filter(d => d.room === '언덕집').reduce((acc, cur) => acc + (cur.nights || 0), 0);
       
       const roomStats = { '앞집':0, '뒷집':0, '언덕집':0 };
       let weekdayCount = 0; let weekendCount = 0;
@@ -489,7 +498,6 @@
         nightsStats[d.nights] = (nightsStats[d.nights] || 0) + 1;
       });
 
-      // 💡 업체청소 비용 계산을 위해 monthly 객체에 agencyClean 초기값 설정
       const statsObj = {
         overall: { revenue: 0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} },
         monthly: {}
@@ -517,7 +525,6 @@
         statsObj.monthly[monthKey].rooms[d.room].rev += rev;
 
         if (d.status !== '취소') {
-          // 객실 가동률 계산
           let curr = new Date(d.start);
           while(curr < d.end) {
             const currKey = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2,'0')}`;
@@ -529,7 +536,6 @@
             curr.setDate(curr.getDate() + 1);
           }
           
-          // 💡 업체청소 카운트 (청소가 진행되는 퇴실일 기준 달에 합산)
           if (d.todo?.task3_agency) {
             const endMonthKey = `${d.end.getFullYear()}-${String(d.end.getMonth()+1).padStart(2,'0')}`;
             if (!statsObj.monthly[endMonthKey]) {
@@ -542,7 +548,6 @@
 
       const overallTotalDays = minDate < maxDate ? Math.max(1, Math.round((maxDate - minDate)/(1000*60*60*24))) : 1;
       
-      // 💡 전체 객실 가동률 (3개 객실 총 이용가능일 수 대비)
       const totalAvailableNights = overallTotalDays * 3;
       const totalOccupiedNights = statsObj.overall.rooms['앞집'].nights + statsObj.overall.rooms['뒷집'].nights + statsObj.overall.rooms['언덕집'].nights;
       const overallOccupancyRate = Math.round((totalOccupiedNights / totalAvailableNights) * 100) || 0;
@@ -701,7 +706,6 @@
               </div>
             )}
             
-            {/* 💡 업데이트 된 To-Do 탭 */}
             {activeTab === 'To-Do' && (
               <div>
                 <h3 style={{marginTop:0, marginBottom:'20px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
@@ -722,7 +726,6 @@
                       </div>
                       
                       <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
-                        {/* 💡 체크박스 오른쪽 정렬 */}
                         <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
                           <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
                             ① 입실 상태 확인
@@ -737,7 +740,6 @@
                           <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
                         </label>
                         
-                        {/* 💡 퇴실 청소 2가지 분리 */}
                         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
                           <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: isTask3Done ? 'line-through' : 'none', color: isTask3Done ? '#bdc3c7' : '#2c3e50'}}>
                             ③ 퇴실 청소 진행
@@ -767,6 +769,7 @@
               <div>
                 <h3 style={{marginTop:0}}>총 누적 예약 리스트 ({filteredList.length}건)</h3>
                 
+                {/* 💡 예약자료 정렬 기준 셀렉트바 추가 */}
                 <div className="filter-bar">
                   <input type="text" placeholder="이름 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <select value={filterRoom} onChange={e => setFilterRoom(e.target.value)}>
@@ -776,6 +779,10 @@
                   <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                     <option value="전체">모든 상태</option>
                     <option value="확정">확정</option><option value="취소">취소</option>
+                  </select>
+                  <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} style={{background:'#f8f9fa', fontWeight:'bold'}}>
+                    <option value="desc">최신순</option>
+                    <option value="asc">과거순</option>
                   </select>
                 </div>
 
@@ -831,10 +838,12 @@
             {activeTab === '이용통계' && (
               <div>
                 <h3 style={{marginTop:0, marginBottom:'20px'}}>📊 종합 이용 통계 (확정 건 기준)</h3>
+                {/* 💡 요청하신 4가지 지표 순서 및 계산 반영 */}
                 <div className="stats-grid" style={{marginTop:0}}>
                   <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 예약</div><div className="stat-num">{totalRes}<span style={{fontSize:'16px'}}>건</span></div></div>
-                  <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 숙박</div><div className="stat-num">{totalNights}<span style={{fontSize:'16px'}}>박</span></div></div>
                   <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 인원</div><div className="stat-num">{totalGuests}<span style={{fontSize:'16px'}}>명</span></div></div>
+                  <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 숙박</div><div className="stat-num">{totalNights}<span style={{fontSize:'16px'}}>박</span></div></div>
+                  <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 임대</div><div className="stat-num">{totalRentals}<span style={{fontSize:'16px'}}>일</span></div></div>
                 </div>
 
                 <h3 style={{marginTop:'30px', marginBottom:'15px', borderTop:'2px solid #eee', paddingTop:'20px'}}>📈 통합 재무 & 객실 가동률</h3>
@@ -847,7 +856,6 @@
                     </div>
                   </div>
                   
-                  {/* 💡 수정됨: 전체 가동률 추가 산출 */}
                   <div className="stat-box" style={{border:'2px solid #2980b9'}}>
                     <div style={{fontSize:'13px', color:'#555', fontWeight:'bold'}}>전체 누적 가동률</div>
                     <div className="stat-num" style={{color:'#2980b9'}}>{overallOccupancyRate}%</div>
@@ -876,7 +884,6 @@
                           <div style={{fontSize:'18px', fontWeight:'bold', color:'#d35400'}}>{formatMoney(mData.revenue)}</div>
                         </div>
                         
-                        {/* 💡 추가됨: 월별 업체청소 건수 및 비용 합산 */}
                         <div style={{background:'#f8f9fa', padding:'12px', borderRadius:'8px', borderLeft:'4px solid #9b59b6'}}>
                           <div style={{fontSize:'12px', color:'#777', marginBottom:'5px'}}>해당 월 업체청소 비용 ({mData.agencyClean || 0}건)</div>
                           <div style={{fontSize:'16px', fontWeight:'bold', color:'#8e44ad'}}>- {formatMoney(agencyCost)}</div>
