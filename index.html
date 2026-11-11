@@ -18,9 +18,11 @@
     body { margin: 0; background-color: #f8f9fa; font-family: -apple-system, sans-serif; color: #333; }
     .app-container { display: flex; flex-direction: column; min-height: 100vh; }
     
-    header { background: #2c3e50; color: white; padding: 10px 15px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; border-bottom: 3px solid #FFBB00;}
+    header { background: #2c3e50; color: white; padding: 10px 15px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 15px; border-bottom: 3px solid #FFBB00; flex-wrap: wrap;}
     .header-logo { max-height: 28px; }
-    .header-title { font-size: 13px; color: #bdc3c7; letter-spacing: 1px; margin: 0; font-weight: normal;}
+    
+    /* 💡 추가됨: 헤더 업데이트 텍스트 스타일 */
+    .header-update { font-size: 12px; color: #f1c40f; font-weight: 500; letter-spacing: 0.5px; }
     
     .content { flex: 1; padding: 12px; width: 100%; max-width: 1000px; margin: 0 auto; box-sizing: border-box; padding-bottom: 80px; }
     
@@ -66,6 +68,12 @@
     .filter-bar input { margin: 0; flex: 2; }
     .filter-bar select { margin: 0; flex: 1; padding: 8px;}
 
+    /* 💡 추가됨: 파일연동 탭 반응형 레이아웃 CSS */
+    .sync-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;}
+    .sync-box { flex: 1; background: #f8f9fa; padding: 18px; border-radius: 10px; border: 1px solid #e1e8ed; }
+    .sync-label { display: block; font-size: 13px; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+    .sync-input { margin: 0; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 6px; width: 100%; box-sizing: border-box; font-size: 13px; cursor: pointer; }
+
     nav { display: flex; background: white; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); overflow-x: auto; white-space: nowrap;}
     nav::-webkit-scrollbar { display: none; }
     nav button { flex: 1; min-width: 65px; padding: 14px 2px; border: none; background: none; cursor: pointer; color: #95a5a6; font-size: 12px; font-weight: 600;}
@@ -75,16 +83,18 @@
       nav { position: sticky; top: 0; border-bottom: 1px solid #ddd; justify-content: center; gap: 10px; }
       nav button { max-width: 150px; border-radius: 8px 8px 0 0; padding: 15px 0; min-width:80px;}
       nav button.active { border-bottom: 3px solid #FFBB00; background: #f8f9fa;}
-      .upload-section { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee;}
       .cal-cell { min-height: 105px; } 
-      .cal-event { font-size: 11px; padding: 6px; }
       .event-text-pc { display: inline; }
       .event-text-mobile { display: none; }
+      
+      /* PC에서 파일연동 영역 가로 2단 분리 */
+      .sync-container { flex-direction: row; }
     }
     @media (max-width: 767px) {
       nav { position: fixed; bottom: 0; width: 100%; border-top: 1px solid #ddd; }
       nav button.active { border-top: 3px solid #FFBB00; }
       .filter-bar { flex-wrap: wrap; }
+      .header-update { font-size: 11px; }
     }
   </style>
 </head>
@@ -130,8 +140,10 @@
       const [filterRoom, setFilterRoom] = React.useState('전체');
       const [filterStatus, setFilterStatus] = React.useState('전체');
       
-      // 💡 예약자료 정렬 기준 상태 추가 ('desc': 최신순, 'asc': 과거순)
       const [sortOrder, setSortOrder] = React.useState('desc');
+      
+      // 💡 업데이트 일시 표시용 State
+      const [lastUpdated, setLastUpdated] = React.useState(null);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
 
@@ -151,7 +163,14 @@
             setAllData([]);
           }
         });
-        return () => ref.off();
+
+        // 💡 메타데이터(업데이트 일시) 로드
+        const metaRef = db.ref('dal2sil_meta/lastUpdated');
+        metaRef.on('value', (snapshot) => {
+          setLastUpdated(snapshot.val());
+        });
+
+        return () => { ref.off(); metaRef.off(); };
       }, []);
 
       const saveToCloud = (dataArray) => {
@@ -170,6 +189,17 @@
       const formatDate = (d) => {
         if (!d || isNaN(d.valueOf())) return '날짜미상';
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      };
+
+      // 💡 업데이트 일시 문자열 포맷팅
+      const formatUpdateDate = (dateString) => {
+        if (!dateString) return '';
+        const d = new Date(dateString);
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const ampm = d.getHours() >= 12 ? '오후' : '오전';
+        const h = d.getHours() % 12 || 12;
+        const m = String(d.getMinutes()).padStart(2, '0');
+        return `업데이트: ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 ${days[d.getDay()]}요일 ${ampm} ${h}시 ${m}분`;
       };
 
       const parseLocal = (str) => {
@@ -294,7 +324,7 @@
                   icList.push({
                     room: r,
                     name: extractName(summary),
-                    fullTitle: summary, 
+                    fullTitle: summary,
                     start: sDate, end: eDate, nights: nights > 0 ? nights : 1,
                     status: (summary.includes('취소') || ev.includes('취소')) ? '취소' : '확정',
                     contact: contact,
@@ -361,6 +391,10 @@
                 });
                 
                 saveToCloud(finalArray);
+                
+                // 💡 연동 성공 시 업데이트 기록 저장
+                db.ref('dal2sil_meta/lastUpdated').set(new Date().toISOString());
+
                 alert("연동 완료! 문제가 있는 내역은 [확인필요] 탭을 점검하세요.");
                 setIsSyncing(false);
                 setExcelFile(null); setIcsFile(null);
@@ -452,6 +486,8 @@
       
       const todayDate = new Date();
       todayDate.setHours(0,0,0,0);
+      const todayTime = todayDate.getTime();
+      
       const pastWeek = new Date(todayDate);
       pastWeek.setDate(todayDate.getDate() - 7);
       const nextWeek = new Date(todayDate);
@@ -463,10 +499,8 @@
         const isCompleted = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
         return inRange && !isCompleted;
       });
-      // To-Do는 임박한 날짜(시작일) 순서대로 정렬
       todoList.sort((a,b) => a.start.getTime() - b.start.getTime());
       
-      // 💡 예약자료 리스트: 상태/옵션에 따라 실시간 정렬
       let filteredList = validData.filter(d => {
         const safeName = String(d.name || '').toLowerCase();
         const matchName = safeName.includes(searchTerm.toLowerCase());
@@ -481,7 +515,6 @@
           : a.start.getTime() - b.start.getTime();
       });
 
-      // 💡 [이용통계] 지표 세분화 계산 로직
       const totalRes = activeData.length;
       const totalGuests = activeData.reduce((acc, cur) => acc + (cur.guests || 2), 0);
       const totalNights = activeData.filter(d => d.room === '앞집' || d.room === '뒷집').reduce((acc, cur) => acc + (cur.nights || 0), 0);
@@ -607,7 +640,7 @@
 
           <header>
             <img src="로고_투명_가로_화이트.png" alt="스테이 달이실" className="header-logo" />
-            <div className="header-title">통합 관리 대시보드</div>
+            {lastUpdated && <div className="header-update">{formatUpdateDate(lastUpdated)}</div>}
           </header>
 
           <div className="content">
@@ -675,11 +708,27 @@
 
                     return (
                       <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
-                        {week.map((date, dIndex) => (
-                          <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
-                            {date && <div className="cal-date" style={{color: date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')}}>{date.getDate()}</div>}
-                          </div>
-                        ))}
+                        {week.map((date, dIndex) => {
+                          // 💡 오늘 날짜 강조 로직
+                          const isToday = date && date.getTime() === todayTime;
+                          return (
+                            <div key={dIndex} className="cal-cell" style={{background: date ? '#fff' : '#f9f9f9'}}>
+                              {date && (
+                                <div style={{textAlign:'left', marginBottom:'2px'}}>
+                                  <span className="cal-date" style={{
+                                    color: isToday ? '#fff' : (date.getDay()===0 ? '#e74c3c' : (date.getDay()===6 ? '#3498db' : '#888')),
+                                    background: isToday ? '#2c3e50' : 'transparent',
+                                    display: 'inline-block',
+                                    padding: isToday ? '2px 6px' : '0 2px',
+                                    borderRadius: isToday ? '6px' : '0'
+                                  }}>
+                                    {date.getDate()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                         
                         {renderedEvents.map(ev => {
                           const topPos = 25 + (ev.trackIdx * 26);
@@ -769,7 +818,6 @@
               <div>
                 <h3 style={{marginTop:0}}>총 누적 예약 리스트 ({filteredList.length}건)</h3>
                 
-                {/* 💡 예약자료 정렬 기준 셀렉트바 추가 */}
                 <div className="filter-bar">
                   <input type="text" placeholder="이름 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <select value={filterRoom} onChange={e => setFilterRoom(e.target.value)}>
@@ -838,7 +886,6 @@
             {activeTab === '이용통계' && (
               <div>
                 <h3 style={{marginTop:0, marginBottom:'20px'}}>📊 종합 이용 통계 (확정 건 기준)</h3>
-                {/* 💡 요청하신 4가지 지표 순서 및 계산 반영 */}
                 <div className="stats-grid" style={{marginTop:0}}>
                   <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 예약</div><div className="stat-num">{totalRes}<span style={{fontSize:'16px'}}>건</span></div></div>
                   <div className="stat-box"><div style={{fontSize:'13px', color:'#888', fontWeight:'bold'}}>총 인원</div><div className="stat-num">{totalGuests}<span style={{fontSize:'16px'}}>명</span></div></div>
@@ -919,16 +966,25 @@
               </div>
             )}
 
+            {/* 💡 새로 적용된 파일연동 레이아웃 */}
             {activeTab === '파일연동' && (
               <div>
                 <h3 style={{marginTop:0}}>☁️ 클라우드 파일 연동</h3>
-                <div className="card">
-                  <p style={{fontSize:'13px', color:'#666'}}>엑셀과 캘린더(.ics) 파일을 올려 최신 정보를 동기화하세요.</p>
-                  <label style={{fontSize:'12px', fontWeight:'bold'}}>1. 엑셀 파일 (.xlsx)</label>
-                  <input type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} />
-                  <label style={{fontSize:'12px', fontWeight:'bold', marginTop:'10px'}}>2. 캘린더 파일 (.ics)</label>
-                  <input type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} />
-                  <button className="btn" onClick={handleSync} style={{marginTop:'15px'}}>{isSyncing ? '연동 중...' : '데이터 연동하기'}</button>
+                <div className="card" style={{padding: '20px'}}>
+                  <p style={{fontSize:'13px', color:'#666', marginBottom:'20px'}}>엑셀과 캘린더(.ics) 파일을 올려 최신 정보를 동기화하세요.</p>
+                  
+                  <div className="sync-container">
+                    <div className="sync-box">
+                      <label className="sync-label">1. 엑셀 파일 (.xlsx)</label>
+                      <input className="sync-input" type="file" accept=".xlsx" onChange={e => setExcelFile(e.target.files[0])} />
+                    </div>
+                    <div className="sync-box">
+                      <label className="sync-label">2. 캘린더 파일 (.ics)</label>
+                      <input className="sync-input" type="file" accept=".ics" onChange={e => setIcsFile(e.target.files[0])} />
+                    </div>
+                  </div>
+                  
+                  <button className="btn" onClick={handleSync} style={{padding:'15px', fontSize:'15px'}}>{isSyncing ? '연동 중...' : '데이터 연동하기'}</button>
                 </div>
               </div>
             )}
