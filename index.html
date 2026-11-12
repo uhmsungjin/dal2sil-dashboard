@@ -141,7 +141,10 @@
       
       const [sortOrder, setSortOrder] = React.useState('desc');
       const [lastUpdated, setLastUpdated] = React.useState(null);
+      
       const [showCompletedTodo, setShowCompletedTodo] = React.useState(false);
+      // 💡 해결 완료된 고장/파손 표시 상태
+      const [showResolvedDamages, setShowResolvedDamages] = React.useState(false);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
 
@@ -154,13 +157,29 @@
             
             const parsedData = Object.values(data).map(d => {
               const sDate = d.start ? new Date(d.start) : null;
-              let currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
+              // 💡 To-Do 스키마 확장: 고장/파손(damage_has, damage_none, damage_memo, damage_resolved)
+              let currentTodo = d.todo || {};
+              currentTodo = {
+                task1: currentTodo.task1 || false,
+                task2: currentTodo.task2 || false,
+                damage_has: currentTodo.damage_has || false,
+                damage_none: currentTodo.damage_none || false,
+                damage_memo: currentTodo.damage_memo || '',
+                damage_resolved: currentTodo.damage_resolved || false,
+                task3_self: currentTodo.task3_self || currentTodo.task3 || false,
+                task3_agency: currentTodo.task3_agency || false,
+                confirmed: currentTodo.confirmed || false
+              };
               
-              // 💡 2026년 11월 7일 이전의 일정은 '자체청소 완료' 상태로 일괄 자동 마이그레이션 처리
+              // 26년 11월 7일 이전 자동 완료 마이그레이션
               if (sDate && sDate.getTime() <= new Date(2026, 10, 7, 23, 59, 59).getTime()) {
                 if (!currentTodo.confirmed) {
-                  currentTodo = { task1: true, task2: true, task3_self: true, task3_agency: false, confirmed: true };
-                  needsUpdate = true; // 클라우드 동기화 필요 플래그
+                  currentTodo = { 
+                    task1: true, task2: true, 
+                    damage_has: false, damage_none: true, damage_memo: '', damage_resolved: true,
+                    task3_self: true, task3_agency: false, confirmed: true 
+                  };
+                  needsUpdate = true;
                 }
               }
               
@@ -174,7 +193,6 @@
             
             setAllData(parsedData);
             
-            // 데이터 교정이 일어났을 경우에만 파이어베이스에 바로 업데이트 (최초 1회 동작)
             if (needsUpdate) {
               const cleanData = parsedData.map(d => ({
                 ...d,
@@ -269,13 +287,43 @@
       const toggleTodo = (id, taskKey) => {
         const newData = allData.map(d => {
           if (d.id === id) {
-            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
+            const currentTodo = d.todo || {};
             let updatedTodo = { ...currentTodo, [taskKey]: !currentTodo[taskKey] };
             
+            // 배타적 체크박스 연결 로직
             if (taskKey === 'task3_self' && updatedTodo.task3_self) updatedTodo.task3_agency = false;
             if (taskKey === 'task3_agency' && updatedTodo.task3_agency) updatedTodo.task3_self = false;
+            
+            if (taskKey === 'damage_has' && updatedTodo.damage_has) updatedTodo.damage_none = false;
+            if (taskKey === 'damage_none' && updatedTodo.damage_none) updatedTodo.damage_has = false;
 
             return { ...d, todo: updatedTodo };
+          }
+          return d;
+        });
+        setAllData(newData);
+        saveToCloud(newData);
+      };
+
+      // 💡 메모 저장 함수
+      const saveDamageMemo = (id, memoText) => {
+        const newData = allData.map(d => {
+          if (d.id === id) {
+            const currentTodo = d.todo || {};
+            return { ...d, todo: { ...currentTodo, damage_memo: memoText } };
+          }
+          return d;
+        });
+        setAllData(newData);
+        saveToCloud(newData);
+      };
+
+      // 💡 확인필요 탭에서 파손 조치 완료 토글 함수
+      const resolveDamage = (id, isResolved) => {
+        const newData = allData.map(d => {
+          if (d.id === id) {
+            const currentTodo = d.todo || {};
+            return { ...d, todo: { ...currentTodo, damage_resolved: isResolved } };
           }
           return d;
         });
@@ -286,7 +334,7 @@
       const confirmTodo = (id, isConfirmed) => {
         const newData = allData.map(d => {
           if (d.id === id) {
-            const currentTodo = d.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false };
+            const currentTodo = d.todo || {};
             return { ...d, todo: { ...currentTodo, confirmed: isConfirmed } };
           }
           return d;
@@ -393,7 +441,11 @@
                     existingTodos[key] = {
                       task1: oldTodo.task1 || false,
                       task2: oldTodo.task2 || false,
-                      task3_self: oldTodo.task3_self || oldTodo.task3 || false,
+                      damage_has: oldTodo.damage_has || false,
+                      damage_none: oldTodo.damage_none || false,
+                      damage_memo: oldTodo.damage_memo || '',
+                      damage_resolved: oldTodo.damage_resolved || false,
+                      task3_self: oldTodo.task3_self || false,
                       task3_agency: oldTodo.task3_agency || false,
                       confirmed: oldTodo.confirmed || false
                     };
@@ -437,7 +489,7 @@
                   return {
                     ...d, 
                     id: d.id || `id_${Date.now()}_${Math.random()}`,
-                    todo: existingTodos[key] || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
+                    todo: existingTodos[key] || { task1: false, task2: false, damage_has: false, damage_none: false, damage_memo: '', damage_resolved: false, task3_self: false, task3_agency: false, confirmed: false }
                   }
                 });
                 
@@ -470,7 +522,7 @@
           start: sDate, end: eDate, nights: n,
           status: '확정', contact: form.contact, guests: parseInt(form.guests) || 2, memo: form.memo,
           price: p, refund: 0, revenue: p,
-          todo: { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false }
+          todo: { task1: false, task2: false, damage_has: false, damage_none: false, damage_memo: '', damage_resolved: false, task3_self: false, task3_agency: false, confirmed: false }
         };
         const key = `${newData.room}_${formatDate(newData.start)}`;
         const filtered = allData.filter(d => `${d.room}_${formatDate(d.start)}` !== key);
@@ -498,7 +550,7 @@
           contact: editForm.contact,
           revenue: rev,
           memo: editForm.memo,
-          todo: selectedEvent.todo || { task1: false, task2: false, task3_self: false, task3_agency: false, confirmed: false },
+          todo: selectedEvent.todo || { task1: false, task2: false, damage_has: false, damage_none: false, damage_memo: '', damage_resolved: false, task3_self: false, task3_agency: false, confirmed: false },
           fullTitle: `[${editForm.room}] ${editForm.name}/ ${n}박` 
         };
 
@@ -659,6 +711,12 @@
         });
         return issues;
       };
+      
+      // 💡 고장/파손 신고 내역 필터링
+      const reportedDamages = allData.filter(d => d.todo?.damage_has);
+      const unresolvedDamages = reportedDamages.filter(d => !d.todo?.damage_resolved);
+      const resolvedDamages = reportedDamages.filter(d => d.todo?.damage_resolved);
+      
       const conflicts = getConflicts();
 
       const getDaysInMonth = (date) => {
@@ -684,7 +742,8 @@
       });
 
       const renderTodoCard = (d, isCompletedList) => {
-        const isReadyToConfirm = d.todo?.task1 && d.todo?.task2 && (d.todo?.task3_self || d.todo?.task3_agency);
+        // 💡 4가지 할 일이 모두 체크되어야 완료 버튼 활성화
+        const isReadyToConfirm = d.todo?.task1 && d.todo?.task2 && (d.todo?.damage_has || d.todo?.damage_none) && (d.todo?.task3_self || d.todo?.task3_agency);
         
         return (
           <div key={d.id} className="card" style={{borderLeft: `5px solid ${d.room==='앞집'?'#e74c3c':(d.room==='뒷집'?'#3498db':'#27ae60')}`, padding:'20px', opacity: isCompletedList ? 0.75 : 1}}>
@@ -700,6 +759,7 @@
             </div>
             
             <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+              
               <label style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px', cursor:'pointer'}}>
                 <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: d.todo?.task1 ? 'line-through' : 'none', color: d.todo?.task1 ? '#bdc3c7' : '#2c3e50'}}>
                   ① 입실 상태 확인
@@ -714,9 +774,37 @@
                 <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
               </label>
               
+              {/* 💡 3번 항목: 고장/파손 확인 */}
+              <div style={{display:'flex', flexDirection:'column', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: (d.todo?.damage_has || d.todo?.damage_none) ? 'line-through' : 'none', color: (d.todo?.damage_has || d.todo?.damage_none) ? '#bdc3c7' : '#2c3e50'}}>
+                    ③ 고장/파손 확인
+                  </span>
+                  <div style={{display:'flex', gap:'15px'}}>
+                    <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                      있음 <input type="checkbox" checked={d.todo?.damage_has || false} onChange={() => toggleTodo(d.id, 'damage_has')} />
+                    </label>
+                    <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
+                      없음 <input type="checkbox" checked={d.todo?.damage_none || false} onChange={() => toggleTodo(d.id, 'damage_none')} />
+                    </label>
+                  </div>
+                </div>
+                {/* 💡 '있음' 체크 시 메모 텍스트 창 표시 */}
+                {d.todo?.damage_has && (
+                  <input 
+                    type="text" 
+                    placeholder="고장 또는 파손된 내역을 입력해주세요. (바탕화면 클릭 시 자동 저장)" 
+                    defaultValue={d.todo?.damage_memo} 
+                    onBlur={(e) => saveDamageMemo(d.id, e.target.value)} 
+                    style={{marginTop:'15px', marginBottom:0, padding:'10px', fontSize:'13px', border:'1px solid #FFBB00', borderRadius:'6px', background:'#fff'}} 
+                  />
+                )}
+              </div>
+
+              {/* 기존 3번 항목 -> 4번으로 변경 */}
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
                 <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: (d.todo?.task3_self || d.todo?.task3_agency) ? 'line-through' : 'none', color: (d.todo?.task3_self || d.todo?.task3_agency) ? '#bdc3c7' : '#2c3e50'}}>
-                  ③ 퇴실 청소 진행
+                  ④ 퇴실 청소 진행
                 </span>
                 <div style={{display:'flex', gap:'15px'}}>
                   <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'bold', color:'#7f8c8d', cursor:'pointer'}}>
@@ -824,8 +912,10 @@
                       <div key={wIndex} className="cal-row" style={{ minHeight: `${rowMinHeight}px` }}>
                         {week.map((date, dIndex) => {
                           const isToday = date && date.getTime() === todayTime;
+                          const cellBg = !date ? '#f9f9f9' : (isToday ? '#5a6268' : '#fff');
+                          
                           return (
-                            <div key={dIndex} className="cal-cell" style={{background: !date ? '#f9f9f9' : (isToday ? '#5a6268' : '#fff')}}>
+                            <div key={dIndex} className="cal-cell" style={{background: cellBg}}>
                               {date && (
                                 <div style={{textAlign:'left', marginBottom:'2px'}}>
                                   <span className="cal-date" style={{
@@ -871,18 +961,18 @@
               <div>
                 <h3 style={{marginTop:0, marginBottom:'5px', color:'#2c3e50'}}>📋 To-Do 리스트</h3>
                 <p style={{fontSize:'13px', color:'#7f8c8d', marginBottom:'20px', marginTop:0}}>
-                  3가지 업무를 모두 체크한 뒤 <strong>[✅ 완료 확인]</strong> 버튼을 누르면 목록에서 지워집니다.
+                  4가지 업무를 모두 체크한 뒤 <strong>[✅ 완료 확인]</strong> 버튼을 누르면 목록에서 지워집니다.
                 </p>
                 
                 <div style={{marginBottom: '20px'}}>
                    <button className="btn" style={{background: showCompletedTodo ? '#e1e8ed' : '#2980b9', color: showCompletedTodo ? '#333' : '#fff'}} onClick={() => setShowCompletedTodo(!showCompletedTodo)}>
-                     {showCompletedTodo ? '완료된 항목 접기 ▲' : `✅ 완료된 과거 항목 보기 (${completedTodoList.length}건) ▼`}
+                     {showCompletedTodo ? '완료된 항목 접기 ▲' : `✅ 처리 완료된 과거 항목 보기 (${completedTodoList.length}건) ▼`}
                    </button>
                 </div>
 
                 {showCompletedTodo && (
                    <div style={{marginBottom: '30px', padding: '15px', background: '#f8f9fa', borderRadius: '10px', border: '1px solid #ddd'}}>
-                     <h4 style={{marginTop:0, color:'#2c3e50', borderBottom:'2px solid #ccc', paddingBottom:'10px'}}>✅ 확인 완료된 과거 내역</h4>
+                     <h4 style={{marginTop:0, color:'#2c3e50', borderBottom:'2px solid #ccc', paddingBottom:'10px'}}>✅ 확인 완료된 내역</h4>
                      {completedTodoList.length > 0 ? completedTodoList.map(d => renderTodoCard(d, true)) : <p style={{fontSize:'13px', color:'#888'}}>완료된 항목이 없습니다.</p>}
                    </div>
                 )}
@@ -944,9 +1034,9 @@
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 예약 불일치 내역</h3>
-                <p style={{fontSize:'13px', color:'#666'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 교정이 필요합니다.</p>
+                <p style={{fontSize:'13px', color:'#666', marginBottom:'20px'}}>이곳에 뜨는 항목은 엑셀과 캘린더의 상태가 달라 교정이 필요합니다.</p>
                 {conflicts.length > 0 ? conflicts.map((c, i) => (
-                  <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c', paddingLeft:'15px'}}>
+                  <div key={i} className="card" style={{borderLeft: '4px solid #e74c3c', paddingLeft:'15px', marginBottom:'30px'}}>
                     <strong>[{c.type}]</strong> <span style={{color:'#555', fontSize:'14px'}}>{c.date}</span>
                     <ul style={{fontSize:'13px', paddingLeft:'20px', marginTop:'10px', lineHeight:'1.6'}}>
                       {c.items.map(item => (
@@ -958,9 +1048,60 @@
                     </ul>
                   </div>
                 )) : (
-                  <div className="card" style={{textAlign:'center', padding:'40px 20px'}}>
-                    <div style={{fontSize:'30px', marginBottom:'10px'}}>✅</div>
-                    <div style={{color:'#27ae60', fontWeight:'bold'}}>교정이 필요한 예약이 없습니다.</div>
+                  <div className="card" style={{textAlign:'center', padding:'30px 20px', color:'#27ae60', marginBottom:'30px'}}>
+                    <div style={{fontSize:'25px', marginBottom:'10px'}}>✅</div>
+                    <div style={{fontWeight:'bold', fontSize:'14px'}}>교정이 필요한 예약이 없습니다.</div>
+                  </div>
+                )}
+
+                {/* 💡 신설: 고장/파손 보고 내역 확인 및 처리 영역 */}
+                <h3 style={{marginTop:'40px', color:'#d35400'}}>🛠️ 고장/파손 신고 내역</h3>
+                <p style={{fontSize:'13px', color:'#666'}}>To-Do 탭에서 '있음'으로 보고된 고장 및 파손 내역입니다. 처리가 끝나면 완료 버튼을 눌러주세요.</p>
+                
+                <div style={{marginBottom: '20px'}}>
+                   <button className="btn" style={{background: showResolvedDamages ? '#e1e8ed' : '#f39c12', color: showResolvedDamages ? '#333' : '#fff'}} onClick={() => setShowResolvedDamages(!showResolvedDamages)}>
+                     {showResolvedDamages ? '처리 완료된 항목 접기 ▲' : `✅ 처리 완료된 내역 보기 (${resolvedDamages.length}건) ▼`}
+                   </button>
+                </div>
+
+                {showResolvedDamages && (
+                   <div style={{marginBottom: '30px', padding: '15px', background: '#f8f9fa', borderRadius: '10px', border: '1px solid #ddd'}}>
+                     <h4 style={{marginTop:0, color:'#d35400', borderBottom:'2px solid #ccc', paddingBottom:'10px'}}>✅ 처리 완료된 고장/파손</h4>
+                     {resolvedDamages.length > 0 ? resolvedDamages.map(d => (
+                        <div key={d.id} className="card" style={{borderLeft: '4px solid #bdc3c7', opacity: 0.7}}>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                            <div>
+                              <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                              <strong style={{marginLeft:'5px'}}>{d.name}</strong> <span style={{fontSize:'12px', color:'#777'}}>({formatDate(d.start)})</span>
+                            </div>
+                            <button className="btn" style={{width:'auto', padding:'5px 10px', fontSize:'11px', background:'#e1e8ed', color:'#333'}} onClick={() => resolveDamage(d.id, false)}>↩️ 취소</button>
+                          </div>
+                          <div style={{marginTop:'10px', padding:'10px', background:'#eee', borderRadius:'6px', fontSize:'13px', color:'#555'}}>
+                            {d.todo?.damage_memo || '메모 없음'}
+                          </div>
+                        </div>
+                     )) : <p style={{fontSize:'13px', color:'#888'}}>완료된 항목이 없습니다.</p>}
+                   </div>
+                )}
+
+                <h4 style={{marginTop:0, color:'#d35400', borderBottom:'2px solid #d35400', paddingBottom:'10px'}}>🚨 확인이 필요한 파손/고장</h4>
+                {unresolvedDamages.length > 0 ? unresolvedDamages.map(d => (
+                  <div key={d.id} className="card" style={{borderLeft: '4px solid #e74c3c'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                      <div>
+                        <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                        <strong style={{marginLeft:'5px'}}>{d.name}</strong> <span style={{fontSize:'12px', color:'#777'}}>({formatDate(d.start)})</span>
+                      </div>
+                      <button className="btn" style={{width:'auto', padding:'5px 10px', fontSize:'11px', background:'#27ae60', color:'#fff'}} onClick={() => resolveDamage(d.id, true)}>✅ 해결 완료</button>
+                    </div>
+                    <div style={{marginTop:'10px', padding:'10px', background:'#fbebe9', borderRadius:'6px', fontSize:'13px', color:'#c0392b', fontWeight:'bold'}}>
+                      📝 {d.todo?.damage_memo || '메모 없음'}
+                    </div>
+                  </div>
+                )) : (
+                  <div className="card" style={{textAlign:'center', padding:'30px 20px', color:'#27ae60'}}>
+                    <div style={{fontSize:'25px', marginBottom:'10px'}}>✨</div>
+                    <div style={{fontWeight:'bold', fontSize:'14px'}}>새로 보고된 고장/파손이 없습니다.</div>
                   </div>
                 )}
               </div>
