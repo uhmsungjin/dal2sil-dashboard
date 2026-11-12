@@ -143,7 +143,6 @@
       const [lastUpdated, setLastUpdated] = React.useState(null);
       
       const [showCompletedTodo, setShowCompletedTodo] = React.useState(false);
-      // 💡 해결 완료된 고장/파손 표시 상태
       const [showResolvedDamages, setShowResolvedDamages] = React.useState(false);
 
       const [form, setForm] = React.useState({ room: '언덕집', name: '', start: '', end: '', guests: 2, contact: '', memo: '', price: '' });
@@ -157,7 +156,6 @@
             
             const parsedData = Object.values(data).map(d => {
               const sDate = d.start ? new Date(d.start) : null;
-              // 💡 To-Do 스키마 확장: 고장/파손(damage_has, damage_none, damage_memo, damage_resolved)
               let currentTodo = d.todo || {};
               currentTodo = {
                 task1: currentTodo.task1 || false,
@@ -171,7 +169,6 @@
                 confirmed: currentTodo.confirmed || false
               };
               
-              // 26년 11월 7일 이전 자동 완료 마이그레이션
               if (sDate && sDate.getTime() <= new Date(2026, 10, 7, 23, 59, 59).getTime()) {
                 if (!currentTodo.confirmed) {
                   currentTodo = { 
@@ -290,7 +287,6 @@
             const currentTodo = d.todo || {};
             let updatedTodo = { ...currentTodo, [taskKey]: !currentTodo[taskKey] };
             
-            // 배타적 체크박스 연결 로직
             if (taskKey === 'task3_self' && updatedTodo.task3_self) updatedTodo.task3_agency = false;
             if (taskKey === 'task3_agency' && updatedTodo.task3_agency) updatedTodo.task3_self = false;
             
@@ -305,7 +301,6 @@
         saveToCloud(newData);
       };
 
-      // 💡 메모 저장 함수
       const saveDamageMemo = (id, memoText) => {
         const newData = allData.map(d => {
           if (d.id === id) {
@@ -318,7 +313,6 @@
         saveToCloud(newData);
       };
 
-      // 💡 확인필요 탭에서 파손 조치 완료 토글 함수
       const resolveDamage = (id, isResolved) => {
         const newData = allData.map(d => {
           if (d.id === id) {
@@ -712,7 +706,6 @@
         return issues;
       };
       
-      // 💡 고장/파손 신고 내역 필터링
       const reportedDamages = allData.filter(d => d.todo?.damage_has);
       const unresolvedDamages = reportedDamages.filter(d => !d.todo?.damage_resolved);
       const resolvedDamages = reportedDamages.filter(d => d.todo?.damage_resolved);
@@ -742,7 +735,6 @@
       });
 
       const renderTodoCard = (d, isCompletedList) => {
-        // 💡 4가지 할 일이 모두 체크되어야 완료 버튼 활성화
         const isReadyToConfirm = d.todo?.task1 && d.todo?.task2 && (d.todo?.damage_has || d.todo?.damage_none) && (d.todo?.task3_self || d.todo?.task3_agency);
         
         return (
@@ -774,7 +766,6 @@
                 <input type="checkbox" checked={d.todo?.task2 || false} onChange={() => toggleTodo(d.id, 'task2')} />
               </label>
               
-              {/* 💡 3번 항목: 고장/파손 확인 */}
               <div style={{display:'flex', flexDirection:'column', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                   <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: (d.todo?.damage_has || d.todo?.damage_none) ? 'line-through' : 'none', color: (d.todo?.damage_has || d.todo?.damage_none) ? '#bdc3c7' : '#2c3e50'}}>
@@ -789,7 +780,6 @@
                     </label>
                   </div>
                 </div>
-                {/* 💡 '있음' 체크 시 메모 텍스트 창 표시 */}
                 {d.todo?.damage_has && (
                   <input 
                     type="text" 
@@ -801,7 +791,6 @@
                 )}
               </div>
 
-              {/* 기존 3번 항목 -> 4번으로 변경 */}
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8f9fa', padding:'15px', borderRadius:'8px'}}>
                 <span style={{fontSize:'14px', fontWeight:'bold', textDecoration: (d.todo?.task3_self || d.todo?.task3_agency) ? 'line-through' : 'none', color: (d.todo?.task3_self || d.todo?.task3_agency) ? '#bdc3c7' : '#2c3e50'}}>
                   ④ 퇴실 청소 진행
@@ -1031,6 +1020,7 @@
               </div>
             )}
 
+            {/* 💡 확인필요 탭: 레이아웃 순서 변경 완료 */}
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 예약 불일치 내역</h3>
@@ -1054,11 +1044,33 @@
                   </div>
                 )}
 
-                {/* 💡 신설: 고장/파손 보고 내역 확인 및 처리 영역 */}
                 <h3 style={{marginTop:'40px', color:'#d35400'}}>🛠️ 고장/파손 신고 내역</h3>
-                <p style={{fontSize:'13px', color:'#666'}}>To-Do 탭에서 '있음'으로 보고된 고장 및 파손 내역입니다. 처리가 끝나면 완료 버튼을 눌러주세요.</p>
+                <p style={{fontSize:'13px', color:'#666', marginBottom:'20px'}}>To-Do 탭에서 '있음'으로 보고된 고장 및 파손 내역입니다. 처리가 끝나면 완료 버튼을 눌러주세요.</p>
                 
-                <div style={{marginBottom: '20px'}}>
+                {/* 1. 진행 중인 내역 먼저 렌더링 */}
+                <h4 style={{marginTop:0, color:'#d35400', borderBottom:'2px solid #d35400', paddingBottom:'10px'}}>🚨 확인이 필요한 파손/고장</h4>
+                {unresolvedDamages.length > 0 ? unresolvedDamages.map(d => (
+                  <div key={d.id} className="card" style={{borderLeft: '4px solid #e74c3c'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                      <div>
+                        <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
+                        <strong style={{marginLeft:'5px'}}>{d.name}</strong> <span style={{fontSize:'12px', color:'#777'}}>({formatDate(d.start)})</span>
+                      </div>
+                      <button className="btn" style={{width:'auto', padding:'5px 10px', fontSize:'11px', background:'#27ae60', color:'#fff'}} onClick={() => resolveDamage(d.id, true)}>✅ 해결 완료</button>
+                    </div>
+                    <div style={{marginTop:'10px', padding:'10px', background:'#fbebe9', borderRadius:'6px', fontSize:'13px', color:'#c0392b', fontWeight:'bold'}}>
+                      📝 {d.todo?.damage_memo || '메모 없음'}
+                    </div>
+                  </div>
+                )) : (
+                  <div className="card" style={{textAlign:'center', padding:'30px 20px', color:'#27ae60', marginBottom:'30px'}}>
+                    <div style={{fontSize:'25px', marginBottom:'10px'}}>✨</div>
+                    <div style={{fontWeight:'bold', fontSize:'14px'}}>새로 보고된 고장/파손이 없습니다.</div>
+                  </div>
+                )}
+
+                {/* 2. 완료된 내역 토글 버튼을 하단으로 이동 */}
+                <div style={{marginBottom: '20px', marginTop:'10px'}}>
                    <button className="btn" style={{background: showResolvedDamages ? '#e1e8ed' : '#f39c12', color: showResolvedDamages ? '#333' : '#fff'}} onClick={() => setShowResolvedDamages(!showResolvedDamages)}>
                      {showResolvedDamages ? '처리 완료된 항목 접기 ▲' : `✅ 처리 완료된 내역 보기 (${resolvedDamages.length}건) ▼`}
                    </button>
@@ -1082,27 +1094,6 @@
                         </div>
                      )) : <p style={{fontSize:'13px', color:'#888'}}>완료된 항목이 없습니다.</p>}
                    </div>
-                )}
-
-                <h4 style={{marginTop:0, color:'#d35400', borderBottom:'2px solid #d35400', paddingBottom:'10px'}}>🚨 확인이 필요한 파손/고장</h4>
-                {unresolvedDamages.length > 0 ? unresolvedDamages.map(d => (
-                  <div key={d.id} className="card" style={{borderLeft: '4px solid #e74c3c'}}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                      <div>
-                        <span className={`badge ${getBadgeClass(d.room, d.status)}`}>{d.room}</span>
-                        <strong style={{marginLeft:'5px'}}>{d.name}</strong> <span style={{fontSize:'12px', color:'#777'}}>({formatDate(d.start)})</span>
-                      </div>
-                      <button className="btn" style={{width:'auto', padding:'5px 10px', fontSize:'11px', background:'#27ae60', color:'#fff'}} onClick={() => resolveDamage(d.id, true)}>✅ 해결 완료</button>
-                    </div>
-                    <div style={{marginTop:'10px', padding:'10px', background:'#fbebe9', borderRadius:'6px', fontSize:'13px', color:'#c0392b', fontWeight:'bold'}}>
-                      📝 {d.todo?.damage_memo || '메모 없음'}
-                    </div>
-                  </div>
-                )) : (
-                  <div className="card" style={{textAlign:'center', padding:'30px 20px', color:'#27ae60'}}>
-                    <div style={{fontSize:'25px', marginBottom:'10px'}}>✨</div>
-                    <div style={{fontWeight:'bold', fontSize:'14px'}}>새로 보고된 고장/파손이 없습니다.</div>
-                  </div>
                 )}
               </div>
             )}
