@@ -631,7 +631,14 @@
       });
 
       const statsObj = {
-        overall: { revenue: 0, rooms: {'앞집': {rev:0, nights:0}, '뒷집': {rev:0, nights:0}, '언덕집': {rev:0, nights:0}} },
+        overall: {
+          revenue: 0,
+          rooms: {
+            '앞집': {rev:0, nights:0, weekdayNights:0, weekendNights:0},
+            '뒷집': {rev:0, nights:0, weekdayNights:0, weekendNights:0},
+            '언덕집': {rev:0, nights:0, weekdayNights:0, weekendNights:0}
+          }
+        },
         monthly: {}
       };
       
@@ -665,6 +672,15 @@
             }
             statsObj.overall.rooms[d.room].nights++;
             statsObj.monthly[currKey].rooms[d.room].nights++;
+
+            // 💡 평일(월~목: 1~4) / 주말(금~일: 5, 6, 0) 구분 카운트
+            const dw = curr.getDay();
+            if (dw >= 1 && dw <= 4) {
+              statsObj.overall.rooms[d.room].weekdayNights++;
+            } else {
+              statsObj.overall.rooms[d.room].weekendNights++;
+            }
+
             curr.setDate(curr.getDate() + 1);
           }
           
@@ -679,10 +695,33 @@
       });
 
       const overallTotalDays = minDate < maxDate ? Math.max(1, Math.round((maxDate - minDate)/(1000*60*60*24))) : 1;
+
+      // 💡 전체 기간 내 평일(월~목) 및 주말(금~일) 일수 산출
+      let overallWeekdayDays = 0;
+      let overallWeekendDays = 0;
+      if (minDate < maxDate) {
+        let scanDate = new Date(minDate);
+        scanDate.setHours(0, 0, 0, 0);
+        let endLimit = new Date(maxDate);
+        endLimit.setHours(0, 0, 0, 0);
+        while (scanDate < endLimit) {
+          const dw = scanDate.getDay();
+          if (dw >= 1 && dw <= 4) overallWeekdayDays++;
+          else overallWeekendDays++;
+          scanDate.setDate(scanDate.getDate() + 1);
+        }
+      }
+      overallWeekdayDays = Math.max(1, overallWeekdayDays);
+      overallWeekendDays = Math.max(1, overallWeekendDays);
       
       const totalAvailableNights = overallTotalDays * 3;
       const totalOccupiedNights = statsObj.overall.rooms['앞집'].nights + statsObj.overall.rooms['뒷집'].nights + statsObj.overall.rooms['언덕집'].nights;
       const overallOccupancyRate = Math.round((totalOccupiedNights / totalAvailableNights) * 100) || 0;
+
+      const totalOccupiedWeekdayNights = statsObj.overall.rooms['앞집'].weekdayNights + statsObj.overall.rooms['뒷집'].weekdayNights + statsObj.overall.rooms['언덕집'].weekdayNights;
+      const totalOccupiedWeekendNights = statsObj.overall.rooms['앞집'].weekendNights + statsObj.overall.rooms['뒷집'].weekendNights + statsObj.overall.rooms['언덕집'].weekendNights;
+      const overallWeekdayRate = Math.round((totalOccupiedWeekdayNights / (overallWeekdayDays * 3)) * 100) || 0;
+      const overallWeekendRate = Math.round((totalOccupiedWeekendNights / (overallWeekendDays * 3)) * 100) || 0;
 
       const getConflicts = () => {
         const issues = [];
@@ -1020,7 +1059,6 @@
               </div>
             )}
 
-            {/* 💡 확인필요 탭: 레이아웃 순서 변경 완료 */}
             {activeTab === '확인필요' && (
               <div>
                 <h3 style={{marginTop:0, color:'#e74c3c'}}>⚠️ 예약 불일치 내역</h3>
@@ -1047,7 +1085,6 @@
                 <h3 style={{marginTop:'40px', color:'#d35400'}}>🛠️ 고장/파손 신고 내역</h3>
                 <p style={{fontSize:'13px', color:'#666', marginBottom:'20px'}}>To-Do 탭에서 '있음'으로 보고된 고장 및 파손 내역입니다. 처리가 끝나면 완료 버튼을 눌러주세요.</p>
                 
-                {/* 1. 진행 중인 내역 먼저 렌더링 */}
                 <h4 style={{marginTop:0, color:'#d35400', borderBottom:'2px solid #d35400', paddingBottom:'10px'}}>🚨 확인이 필요한 파손/고장</h4>
                 {unresolvedDamages.length > 0 ? unresolvedDamages.map(d => (
                   <div key={d.id} className="card" style={{borderLeft: '4px solid #e74c3c'}}>
@@ -1069,7 +1106,6 @@
                   </div>
                 )}
 
-                {/* 2. 완료된 내역 토글 버튼을 하단으로 이동 */}
                 <div style={{marginBottom: '20px', marginTop:'10px'}}>
                    <button className="btn" style={{background: showResolvedDamages ? '#e1e8ed' : '#f39c12', color: showResolvedDamages ? '#333' : '#fff'}} onClick={() => setShowResolvedDamages(!showResolvedDamages)}>
                      {showResolvedDamages ? '처리 완료된 항목 접기 ▲' : `✅ 처리 완료된 내역 보기 (${resolvedDamages.length}건) ▼`}
@@ -1118,13 +1154,23 @@
                     </div>
                   </div>
                   
+                  {/* 💡 평일/주말 누적 가동률 추가 */}
                   <div className="stat-box" style={{border:'2px solid #2980b9'}}>
                     <div style={{fontSize:'13px', color:'#555', fontWeight:'bold'}}>전체 누적 가동률</div>
                     <div className="stat-num" style={{color:'#2980b9'}}>{overallOccupancyRate}%</div>
-                    <div style={{fontSize:'12px', display:'flex', flexDirection:'column', gap:'3px', alignItems:'center', marginTop:'8px'}}>
-                      <span className="badge bg-front" style={{margin:0}}>앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}%</span>
-                      <span className="badge bg-back" style={{margin:0}}>뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}%</span>
-                      <span className="badge bg-hill" style={{margin:0}}>언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}%</span>
+                    <div style={{fontSize:'12px', color:'#555', fontWeight:'bold', marginTop:'4px', marginBottom:'6px'}}>
+                      평일 {overallWeekdayRate}% <span style={{color:'#ccc'}}>|</span> 주말 {overallWeekendRate}%
+                    </div>
+                    <div style={{fontSize:'12px', display:'flex', flexDirection:'column', gap:'4px', alignItems:'center', marginTop:'4px'}}>
+                      <span className="badge bg-front" style={{margin:0}}>
+                        앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['앞집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['앞집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                      </span>
+                      <span className="badge bg-back" style={{margin:0}}>
+                        뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['뒷집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['뒷집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                      </span>
+                      <span className="badge bg-hill" style={{margin:0}}>
+                        언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['언덕집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['언덕집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                      </span>
                     </div>
                   </div>
                 </div>
