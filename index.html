@@ -673,7 +673,6 @@
             statsObj.overall.rooms[d.room].nights++;
             statsObj.monthly[currKey].rooms[d.room].nights++;
 
-            // 💡 평일(월~목: 1~4) / 주말(금~일: 5, 6, 0) 구분 카운트
             const dw = curr.getDay();
             if (dw >= 1 && dw <= 4) {
               statsObj.overall.rooms[d.room].weekdayNights++;
@@ -696,7 +695,6 @@
 
       const overallTotalDays = minDate < maxDate ? Math.max(1, Math.round((maxDate - minDate)/(1000*60*60*24))) : 1;
 
-      // 💡 전체 기간 내 평일(월~목) 및 주말(금~일) 일수 산출
       let overallWeekdayDays = 0;
       let overallWeekendDays = 0;
       if (minDate < maxDate) {
@@ -1154,22 +1152,25 @@
                     </div>
                   </div>
                   
-                  {/* 💡 평일/주말 누적 가동률 추가 */}
+                  {/* 💡 앞집/뒷집/언덕집도 PC/모바일 동일하게 2줄로 줄바꿈 */}
                   <div className="stat-box" style={{border:'2px solid #2980b9'}}>
                     <div style={{fontSize:'13px', color:'#555', fontWeight:'bold'}}>전체 누적 가동률</div>
                     <div className="stat-num" style={{color:'#2980b9'}}>{overallOccupancyRate}%</div>
-                    <div style={{fontSize:'12px', color:'#555', fontWeight:'bold', marginTop:'4px', marginBottom:'6px'}}>
+                    <div style={{fontSize:'12px', color:'#555', fontWeight:'bold', marginTop:'4px', marginBottom:'8px'}}>
                       평일 {overallWeekdayRate}% <span style={{color:'#ccc'}}>|</span> 주말 {overallWeekendRate}%
                     </div>
-                    <div style={{fontSize:'12px', display:'flex', flexDirection:'column', gap:'4px', alignItems:'center', marginTop:'4px'}}>
-                      <span className="badge bg-front" style={{margin:0}}>
-                        앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['앞집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['앞집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                    <div style={{fontSize:'12px', display:'flex', flexDirection:'column', gap:'6px', alignItems:'center', marginTop:'4px', width:'100%'}}>
+                      <span className="badge bg-front" style={{margin:0, lineHeight:'1.4', padding:'6px 10px', width:'100%', boxSizing:'border-box'}}>
+                        <div style={{fontSize:'12px', fontWeight:'800'}}>앞집 {Math.round((statsObj.overall.rooms['앞집'].nights / overallTotalDays) * 100) || 0}%</div>
+                        <div style={{fontSize:'11px', fontWeight:'600'}}>평일 {Math.round((statsObj.overall.rooms['앞집'].weekdayNights / overallWeekdayDays) * 100) || 0}% | 주말 {Math.round((statsObj.overall.rooms['앞집'].weekendNights / overallWeekendDays) * 100) || 0}%</div>
                       </span>
-                      <span className="badge bg-back" style={{margin:0}}>
-                        뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['뒷집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['뒷집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                      <span className="badge bg-back" style={{margin:0, lineHeight:'1.4', padding:'6px 10px', width:'100%', boxSizing:'border-box'}}>
+                        <div style={{fontSize:'12px', fontWeight:'800'}}>뒷집 {Math.round((statsObj.overall.rooms['뒷집'].nights / overallTotalDays) * 100) || 0}%</div>
+                        <div style={{fontSize:'11px', fontWeight:'600'}}>평일 {Math.round((statsObj.overall.rooms['뒷집'].weekdayNights / overallWeekdayDays) * 100) || 0}% | 주말 {Math.round((statsObj.overall.rooms['뒷집'].weekendNights / overallWeekendDays) * 100) || 0}%</div>
                       </span>
-                      <span className="badge bg-hill" style={{margin:0}}>
-                        언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}% (평일 {Math.round((statsObj.overall.rooms['언덕집'].weekdayNights / overallWeekdayDays) * 100) || 0}% / 주말 {Math.round((statsObj.overall.rooms['언덕집'].weekendNights / overallWeekendDays) * 100) || 0}%)
+                      <span className="badge bg-hill" style={{margin:0, lineHeight:'1.4', padding:'6px 10px', width:'100%', boxSizing:'border-box'}}>
+                        <div style={{fontSize:'12px', fontWeight:'800'}}>언덕 {Math.round((statsObj.overall.rooms['언덕집'].nights / overallTotalDays) * 100) || 0}%</div>
+                        <div style={{fontSize:'11px', fontWeight:'600'}}>평일 {Math.round((statsObj.overall.rooms['언덕집'].weekdayNights / overallWeekdayDays) * 100) || 0}% | 주말 {Math.round((statsObj.overall.rooms['언덕집'].weekendNights / overallWeekendDays) * 100) || 0}%</div>
                       </span>
                     </div>
                   </div>
